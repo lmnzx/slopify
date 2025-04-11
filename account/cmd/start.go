@@ -1,25 +1,27 @@
 package main
 
 import (
+	"context"
+	"os"
+
+	"github.com/lmnzx/slopify/account/internal/handler"
 	"github.com/lmnzx/slopify/pkg/logger"
 
-	"github.com/fasthttp/router"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/valyala/fasthttp"
 )
 
-func health_check(ctx *fasthttp.RequestCtx) {
-	ctx.Response.Header.Set("Content-Type", "application/json")
-	ctx.Response.SetBodyString(`{"message": "all ok boss 👍🏻"}`)
-}
-
 func main() {
-	r := router.New()
+	ctx := context.Background()
+	conn, err := pgxpool.New(ctx, "postgres://postgres:password@localhost:5432/slopify?sslmode=disable")
+	if err != nil {
+		os.Exit(1)
+	}
+	defer conn.Close()
 
-	r.GET("/health_check", logger.RequestLogger(health_check))
+	handler := handler.NewHandler(conn)
 
-	l := logger.Get()
-
-	if err := fasthttp.ListenAndServe(":8080", r.Handler); err != nil {
-		l.Fatal().Err(err)
+	if err := fasthttp.ListenAndServe(":8080", logger.RequestLogger(handler.Router().Handler)); err != nil {
+		os.Exit(1)
 	}
 }
