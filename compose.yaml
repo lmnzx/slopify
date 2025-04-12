@@ -6,25 +6,44 @@ services:
     build:
       context: .
       dockerfile: account/Dockerfile
-    ports: [8080:8080]
-    labels: { logging: "promtail" }
+    expose:
+      - "8080"
+    # labels: { logging: "promtail" }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.account.rule=Host(`slopify.local`) && PathPrefix(`/api/account`)"
 
-  loki:
-    image: grafana/loki:3.3.2
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes: [./data/loki:/loki]
-
-  promtail:
-    image: grafana/promtail:3.3.2
-    command: -config.file=/etc/promtail/docker-config.yaml
+  reverse-proxy:
+    container_name: traefik-reverse-proxy
+    image: traefik:latest
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker"
+      - "--providers.docker.exposedByDefault=false"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    labels:
+      - dev.orbstack.domains=slopify.local
     volumes:
-      - ./configs/promtail.yaml:/etc/promtail/docker-config.yaml
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    depends_on: [loki]
 
-  grafana:
-    image: grafana/grafana:11.4.0
-    ports: [3000:3000]
-    volumes:
-      - ./configs/grafana.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+  # loki:
+  #   image: grafana/loki:3.3.2
+  #   command: -config.file=/etc/loki/local-config.yaml
+  #   volumes: [./data/loki:/loki]
+  #
+  # promtail:
+  #   image: grafana/promtail:3.3.2
+  #   command: -config.file=/etc/promtail/docker-config.yaml
+  #   volumes:
+  #     - ./configs/promtail.yaml:/etc/promtail/docker-config.yaml
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   depends_on: [loki]
+  #
+  # grafana:
+  #   image: grafana/grafana:11.4.0
+  #   ports: [3000:3000]
+  #   volumes:
+  #     - ./configs/grafana.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
