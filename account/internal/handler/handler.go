@@ -151,7 +151,7 @@ func (h *handler) logIn(ctx *fasthttp.RequestCtx) {
 	cookie.SetHTTPOnly(true)
 	cookie.SetSameSite(fasthttp.CookieSameSiteStrictMode)
 	// TODO: route
-	cookie.SetPath("/api/account/verify")
+	cookie.SetPath("/")
 	cookie.SetExpire(time.Now().Add(service.RefreshTokenExpiry))
 	ctx.Request.Header.SetCookieBytesKV(cookie.Key(), cookie.Value())
 	ctx.Response.Header.SetCookie(cookie)

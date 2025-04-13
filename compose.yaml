@@ -13,6 +13,18 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.account.rule=Host(`slopify.local`) && PathPrefix(`/api/account`)"
 
+  product:
+    container_name: product-service
+    build:
+      context: .
+      dockerfile: product/Dockerfile
+    expose:
+      - "8080"
+    # labels: { logging: "promtail" }
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.product.rule=Host(`slopify.local`) && PathPrefix(`/api/product`)"
+
   reverse-proxy:
     container_name: traefik-reverse-proxy
     image: traefik:latest

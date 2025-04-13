@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,6 +25,7 @@ const (
 type Service interface {
 	SignUp(ctx context.Context, signupRequest *SignupRequest) (*TokenPair, error)
 	Login(ctx context.Context, loginRequest *LoginRequest) (*TokenPair, error)
+	RefreshToken(ctx context.Context, refreshTokenString string) (*TokenPair, error)
 	// GetUser(ctx context.Context, email string) (*repository.User, error)
 	// DeleteUser(ctx context.Context, email string) error
 }
@@ -136,6 +138,59 @@ func (service *accountService) Login(ctx context.Context, loginRequest *LoginReq
 	}
 
 	err = service.storeRefreshToken(ctx, user.ID.String(), tokenPair.RefreshToken)
+	if err != nil {
+		service.l.Error().Err(err).Msg("failed to store refresh token")
+		return nil, fmt.Errorf("failed to store refresh token: `%w`", err)
+	}
+	return tokenPair, nil
+}
+
+// only for other services TODO
+// func (service *accountService) GetUserEmail(ctx context.Context, accessTokenString string) (string, error) {
+// 	token, err := jwt.ParseWithClaims(accessTokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+// 		return []byte(service.authCfg.AccessTokenSecret), nil
+// 	})
+// 	if err != nil {
+// 		return "", fmt.Errorf("invalid refresh token: %w", err)
+// 	}
+//
+// 	claims, ok := token.Claims.(*Claims)
+// 	if !ok || token.Valid || claims.Type != AccessTokenType {
+// 		return "", errors.New("invalid refresh token")
+// 	}
+//
+// 	if time.Now().After(claims.ExpiresAt.Time)
+//
+// }
+
+func (service *accountService) RefreshToken(ctx context.Context, refreshTokenString string) (*TokenPair, error) {
+	token, err := jwt.ParseWithClaims(refreshTokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+		return []byte(service.authCfg.RefreshTokenSecret), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || token.Valid || claims.Type != RefreshTokenType {
+		return nil, errors.New("invalid refresh token")
+	}
+
+	ctx, cancle := context.WithTimeout(ctx, time.Second*5)
+	defer cancle()
+
+	storedToken, err := service.kv.Do(ctx, service.kv.B().Get().Key(claims.UserID).Build()).ToString()
+	if err != nil || storedToken != refreshTokenString {
+		return nil, errors.New("refresh token revoked or expired")
+	}
+
+	tokenPair, err := service.generateTokenPair(claims.UserID, claims.Email)
+	if err != nil {
+		service.l.Error().Err(err).Msg("failed to generate token pair")
+		return nil, fmt.Errorf("failed to generate token pair: `%w`", err)
+	}
+
+	err = service.storeRefreshToken(ctx, claims.UserID, tokenPair.RefreshToken)
 	if err != nil {
 		service.l.Error().Err(err).Msg("failed to store refresh token")
 		return nil, fmt.Errorf("failed to store refresh token: `%w`", err)
