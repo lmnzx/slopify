@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package account;
+
+option go_package = "account/proto";
+
+import "google/protobuf/timestamp.proto";
+
+service AccountService {
+    rpc GetUserById(GetUserByIdRequest) returns (User) {}
+    rpc GetUserByEmail(GetUserByEmailRequest) returns (User) {}
+    rpc CreateUser(CreateUserRequest) returns (User) {}
+    rpc VaildEmailPassword(VaildEmailPasswordRequest) returns (ValidResponse) {}
+}
+
+message GetUserByIdRequest {
+    string user_id = 1;
+}
+
+message GetUserByEmailRequest {
+    string email = 1;
+}
+
+message CreateUserRequest {
+    string name = 1;
+    string email = 2;
+    string password = 3;
+    string address = 4;
+}
+
+message User {
+    string user_id = 1;
+    string name = 2;
+    string email = 3;
+    string address = 4;
+    google.protobuf.Timestamp created_at = 5;
+    google.protobuf.Timestamp updated_at = 6;
+}
+
+message VaildEmailPasswordRequest {
+    string email = 1;
+    string password = 2;
+}
+
+message ValidResponse {
+    bool is_valid = 1;
+}

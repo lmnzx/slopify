@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "auth/proto";
+
+import "google/protobuf/timestamp.proto";
+
+service AuthService {
+    rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse) {}
+    rpc GenerateToken(GenerateTokenRequest) returns (TokenPair) {}
+}
+
+message ValidateTokenRequest {
+    string access_token = 1;
+    string refresh_token = 2;
+}
+
+message GenerateTokenRequest {
+    string refresh_token = 1;
+}
+
+message ValidateTokenResponse {
+    bool valid = 1;
+    string user_id = 2;
+}
+
+message TokenPair {
+    string access_token = 1;
+    string refresh_token = 2;
+    google.protobuf.Timestamp expires_at = 3;
+}
