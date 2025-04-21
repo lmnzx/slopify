@@ -35,7 +35,7 @@ type TokenPair struct {
 	RefreshToken string
 }
 
-type authService struct {
+type AuthService struct {
 	kv      valkey.Client
 	l       *zerolog.Logger
 	authCfg AuthConfig
@@ -47,14 +47,18 @@ var (
 	ErrTokenExpired       = errors.New("token expired")
 )
 
-func NewAuthService(kv valkey.Client, l *zerolog.Logger) *authService {
-	return &authService{
+func NewAuthService(kv valkey.Client, l *zerolog.Logger) *AuthService {
+	return &AuthService{
 		kv: kv,
 		l:  l,
+		authCfg: AuthConfig{
+			AccessTokenSecret:  "test",
+			RefreshTokenSecret: "test",
+		},
 	}
 }
 
-func (s *authService) ValidateRefreshToken(ctx context.Context, token string) (*TokenPair, error) {
+func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*TokenPair, error) {
 	refreshToken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
 		return []byte(s.authCfg.AccessTokenSecret), nil
 	})
@@ -82,7 +86,7 @@ func (s *authService) ValidateRefreshToken(ctx context.Context, token string) (*
 	return tokenPair, nil
 }
 
-func (s *authService) ValidateAccessToken(token string) (string, error) {
+func (s *AuthService) ValidateAccessToken(token string) (string, error) {
 	accessToken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
 		return []byte(s.authCfg.AccessTokenSecret), nil
 	})
@@ -105,7 +109,7 @@ func (s *authService) ValidateAccessToken(token string) (string, error) {
 	return claims.UserID, nil
 }
 
-func (s *authService) GenerateTokenPair(ctx context.Context, userID, email string) (*TokenPair, error) {
+func (s *AuthService) GenerateTokenPair(ctx context.Context, userID, email string) (*TokenPair, error) {
 	accessTokenClaims := Claims{
 		UserID: userID,
 		Email:  email,

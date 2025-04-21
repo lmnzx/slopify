@@ -3,6 +3,7 @@ module github.com/lmnzx/slopify
 go 1.24.2
 
 require (
+	github.com/fasthttp/router v1.5.4
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
@@ -12,6 +13,8 @@ require (
 	google.golang.org/grpc v1.71.1
 	google.golang.org/protobuf v1.36.6
 )
+
+require github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
