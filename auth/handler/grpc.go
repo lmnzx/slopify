@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 
+	account "github.com/lmnzx/slopify/account/proto"
+	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/auth/proto"
 	"github.com/rs/zerolog"
@@ -13,12 +15,16 @@ import (
 
 type GrpcHandler struct {
 	proto.UnimplementedAuthServiceServer
-	service internal.AuthService
+	service        internal.AuthService
+	accountService account.AccountServiceClient
+	log            *zerolog.Logger
 }
 
-func NewGrpcHandler(client valkey.Client, l *zerolog.Logger) *GrpcHandler {
+func NewGrpcHandler(client valkey.Client, l *zerolog.Logger, a account.AccountServiceClient) *GrpcHandler {
 	return &GrpcHandler{
-		service: *internal.NewAuthService(client, l),
+		service:        *internal.NewAuthService(client, l),
+		accountService: a,
+		log:            l,
 	}
 }
 
@@ -27,7 +33,15 @@ func (h *GrpcHandler) GenerateToken(ctx context.Context, req *proto.GenerateToke
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
 
-	// TODO: check email and userid from db
+	user, err := client.GetUser(ctx, h.log, h.accountService, req.Email)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get the user from account service: %v", err)
+	}
+
+	if user.Email != req.Email || user.UserId != req.UserId {
+		return nil, status.Errorf(codes.PermissionDenied, "user not found: %v", err)
+	}
+
 	tokenPair, err := h.service.GenerateTokenPair(ctx, req.UserId, req.Email)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "token pair generation failed: %v", err)
@@ -49,7 +63,11 @@ func (h *GrpcHandler) ValidateToken(ctx context.Context, req *proto.ValidateToke
 				UserId: nil,
 			}, nil
 		}
-		return nil, status.Errorf(codes.PermissionDenied, "invail token")
+		return &proto.ValidateTokenResponse{
+			Status: proto.ValidateTokenResponse_INVALID,
+			UserId: nil,
+		}, nil
+
 	}
 	return &proto.ValidateTokenResponse{
 		Status: proto.ValidateTokenResponse_VALID,

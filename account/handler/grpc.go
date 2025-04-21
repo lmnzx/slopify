@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -37,10 +38,9 @@ func (h *GrpcHandler) GetUserById(ctx context.Context, req *proto.GetUserByIdReq
 
 	user, err := h.queries.GetUserById(ctx, id)
 	if err != nil {
-		// use pgx error
-		// if err == sql.ErrNoRows {
-		// 	return nil, status.Errorf(codes.NotFound, "user not found")
-		// }
+		if strings.Contains(err.Error(), "no row") {
+			return nil, nil
+		}
 		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
 	}
 	return dbUserToProtoUser(&user), nil
@@ -53,6 +53,9 @@ func (h *GrpcHandler) GetUserByEmail(ctx context.Context, req *proto.GetUserByEm
 
 	user, err := h.queries.GetUserByEmail(ctx, req.Email)
 	if err != nil {
+		if strings.Contains(err.Error(), "no row") {
+			return nil, nil
+		}
 		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
 	}
 
@@ -63,11 +66,6 @@ func (h *GrpcHandler) CreateUser(ctx context.Context, req *proto.CreateUserReque
 	if req.Name == "" || req.Email == "" || req.Address == "" || req.Password == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "missing field")
 	}
-
-	// _, ok := h.queries.GetUserByEmail(ctx, req.Email)
-	// if ok == nil {
-	// 	return nil, status.Errorf(codes.AlreadyExists, "user with this email already exists")
-	// }
 
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -104,12 +102,6 @@ func (h *GrpcHandler) VaildEmailPassword(ctx context.Context, req *proto.VaildEm
 
 	user, err := h.queries.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		// var pgErr *pgconn.PgError
-		// errors.As(err, &pgErr)
-		// fmt.Println(pgErr)
-		// if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		// 	return nil, status.Errorf(codes.AlreadyExists, "user already exists")
-		// }
 		return &proto.ValidResponse{IsValid: false}, nil
 	}
 

@@ -2,18 +2,23 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
+	"github.com/fasthttp/router"
+	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/handler"
 	"github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -34,10 +39,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// account service
+	conn, err := grpc.NewClient(":3000", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect")
+	}
+	defer conn.Close()
+
+	c := account.NewAccountServiceClient(conn)
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go startGrpcServer(ctx, valkeyClient, &log, &wg)
+	go startGrpcServer(ctx, valkeyClient, c, &log, &wg)
+
+	wg.Add(1)
+	go startRestServer(ctx, valkeyClient, c, &log, &wg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -49,7 +66,7 @@ func main() {
 	wg.Wait()
 }
 
-func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, log *zerolog.Logger, wg *sync.WaitGroup) {
+func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, log *zerolog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	lis, err := net.Listen("tcp", ":8000")
@@ -62,7 +79,7 @@ func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, log *zerol
 		grpc.UnaryInterceptor(logger.UnaryServerInterceptor()),
 	)
 
-	h := handler.NewGrpcHandler(valkeyClient, log)
+	h := handler.NewGrpcHandler(valkeyClient, log, accountService)
 	proto.RegisterAuthServiceServer(s, h)
 	reflection.Register(s)
 
@@ -88,5 +105,54 @@ func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, log *zerol
 		}
 	case err := <-serveErrCh:
 		log.Error().Err(err).Msg("grpc server failed")
+	}
+}
+
+func healthHandler(ctx *fasthttp.RequestCtx) {
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.SetContentType("text/plain; charset=utf8")
+	fmt.Fprintf(ctx, "OK")
+}
+
+func startRestServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, log *zerolog.Logger, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	h := handler.NewRestHandler(valkeyClient, log, accountService)
+	r := router.New()
+	r.GET("/health", healthHandler)
+	r.POST("/signup", h.SignUp)
+
+	server := &fasthttp.Server{
+		Handler: logger.RequestLogger(r.Handler),
+	}
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		restAddr := ":9001"
+		log.Info().Msg("rest server started")
+		if err := server.ListenAndServe(restAddr); err != nil {
+			select {
+			case <-ctx.Done():
+				log.Println("fasthttp server stopped gracefully")
+			default:
+				serveErrCh <- err
+			}
+			close(serveErrCh)
+		} else {
+			close(serveErrCh)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		if err := server.Shutdown(); err != nil {
+			log.Error().Err(err).Msg("error during fasthttp server shutdown")
+		}
+		<-serveErrCh
+
+	case err := <-serveErrCh:
+		if err != nil {
+			log.Error().Err(err).Msg("fasthttp server failed unexpectedly")
+		}
 	}
 }

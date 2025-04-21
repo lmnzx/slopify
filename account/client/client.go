@@ -28,5 +28,10 @@ func ValidateToken(ctx context.Context, log zerolog.Logger) {
 	if err != nil {
 		log.Error().Err(err).Msg("could not validate token")
 	}
-	log.Info().Str("status", r.Status.String()).Str("userid", *r.UserId).Msg("validated token")
+	if r.Status == proto.ValidateTokenResponse_VALID {
+		log.Info().Str("status", r.Status.String()).Str("userid", *r.UserId).Msg("validated token")
+	}
+	if r.Status == proto.ValidateTokenResponse_EXPIRED || r.Status == proto.ValidateTokenResponse_INVALID {
+		log.Info().Msg("expaired | invalid")
+	}
 }
