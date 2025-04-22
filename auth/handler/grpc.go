@@ -80,6 +80,7 @@ func (h *GrpcHandler) RefreshToken(ctx context.Context, req *proto.RefreshTokenR
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
 
+	// TODO: don't generate everytime only gen new access token till Refresh Token is valid
 	tokenPair, err := h.service.ValidateRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to validate refresh token: %v", err)

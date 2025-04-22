@@ -9,11 +9,12 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/fasthttp/router"
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/handler"
 	"github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/logger"
+
+	"github.com/fasthttp/router"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valyala/fasthttp"
@@ -121,6 +122,8 @@ func startRestServer(ctx context.Context, valkeyClient valkey.Client, accountSer
 	r := router.New()
 	r.GET("/health", healthHandler)
 	r.POST("/signup", h.SignUp)
+	r.POST("/login", h.LogIn)
+	r.GET("/logout", h.LogOut)
 
 	server := &fasthttp.Server{
 		Handler: logger.RequestLogger(r.Handler),

@@ -9,15 +9,18 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/fasthttp/router"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lmnzx/slopify/account/handler"
 	"github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/account/repository"
+	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/logger"
+
+	"github.com/fasthttp/router"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -39,13 +42,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// auth service
+	conn, err := grpc.NewClient(":8000", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to connect")
+	}
+	defer conn.Close()
+
+	c := auth.NewAuthServiceClient(conn)
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go startGrpcServer(ctx, queries, log, &wg)
+	go startGrpcServer(ctx, queries, c, log, &wg)
 
 	wg.Add(1)
-	go startRestServer(ctx, log, &wg)
+	go startRestServer(ctx, queries, c, log, &wg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -57,7 +69,7 @@ func main() {
 	wg.Wait()
 }
 
-func startGrpcServer(ctx context.Context, queries *repository.Queries, log zerolog.Logger, wg *sync.WaitGroup) {
+func startGrpcServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, log zerolog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	lis, err := net.Listen("tcp", ":3000")
@@ -105,11 +117,13 @@ func healthHandler(ctx *fasthttp.RequestCtx) {
 	fmt.Fprintf(ctx, "OK")
 }
 
-func startRestServer(ctx context.Context, log zerolog.Logger, wg *sync.WaitGroup) {
+func startRestServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, log zerolog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := router.New()
+	handler := handler.NewRestHandler(queries, auth, &log)
 	r.GET("/health", healthHandler)
+	r.POST("/update", handler.Update)
 
 	server := &fasthttp.Server{
 		Handler: logger.RequestLogger(r.Handler),

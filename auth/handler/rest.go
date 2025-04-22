@@ -2,12 +2,11 @@ package handler
 
 import (
 	"encoding/json"
-	"time"
 
-	"github.com/lmnzx/slopify/account/proto"
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
+	"github.com/lmnzx/slopify/pkg/cookie"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valyala/fasthttp"
@@ -57,7 +56,7 @@ func (h *RestHandler) SignUp(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := proto.CreateUserRequest{
+	req := account.CreateUserRequest{
 		Name:     parsedBody.Name,
 		Email:    parsedBody.Email,
 		Password: parsedBody.Password,
@@ -75,28 +74,67 @@ func (h *RestHandler) SignUp(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// todo helper function refactor
-	cookie := fasthttp.AcquireCookie()
-	cookie.SetKey("access_token")
-	cookie.SetValue(tokenPair.AccessToken)
-	cookie.SetHTTPOnly(true)
-	cookie.SetSameSite(fasthttp.CookieSameSiteStrictMode)
-	cookie.SetPath("/")
-	cookie.SetExpire(time.Now().Add(internal.AccessTokenExpiry))
-	ctx.Request.Header.SetCookieBytesKV(cookie.Key(), cookie.Value())
-	ctx.Response.Header.SetCookie(cookie)
-	fasthttp.ReleaseCookie(cookie)
-
-	cookie = fasthttp.AcquireCookie()
-	cookie.SetKey("refresh_token")
-	cookie.SetValue(tokenPair.RefreshToken)
-	cookie.SetHTTPOnly(true)
-	cookie.SetSameSite(fasthttp.CookieSameSiteStrictMode)
-	cookie.SetPath("/")
-	cookie.SetExpire(time.Now().Add(internal.RefreshTokenExpiry))
-	ctx.Request.Header.SetCookieBytesKV(cookie.Key(), cookie.Value())
-	ctx.Response.Header.SetCookie(cookie)
-	fasthttp.ReleaseCookie(cookie)
+	cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+	cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
 
 	ctx.Response.SetBodyString(`{"message": "welcome"}`)
+}
+
+type LogInRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (h *RestHandler) LogIn(ctx *fasthttp.RequestCtx) {
+	body := ctx.Request.Body()
+	if len(body) == 0 {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	var parsedBody LogInRequest
+	if err := json.Unmarshal(body, &parsedBody); err != nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+
+	checkPasswordReq := &account.VaildEmailPasswordRequest{
+		Email:    parsedBody.Email,
+		Password: parsedBody.Password,
+	}
+
+	isValid := client.CheckPassword(ctx, h.log, h.accountService, checkPasswordReq)
+
+	if !isValid {
+		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		return
+	}
+
+	user, err := client.GetUser(ctx, h.log, h.accountService, parsedBody.Email)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		return
+	}
+	if user.UserId == "" {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		return
+	}
+
+	tokenPair, err := h.service.GenerateTokenPair(ctx, user.UserId, user.Email)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		return
+	}
+
+	cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+	cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+
+	ctx.Response.SetBodyString(`{"message": "welcome back"}`)
+}
+
+func (h *RestHandler) LogOut(ctx *fasthttp.RequestCtx) {
+	cookie.Delete(ctx, "access_token")
+	cookie.Delete(ctx, "refresh_token")
+
+	ctx.Response.SetBodyString(`{"message": "good bye"}`)
 }
