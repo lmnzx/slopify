@@ -164,14 +164,30 @@ func (h *RestHandler) LogIn(ctx *fasthttp.RequestCtx) {
 
 func (h *RestHandler) LogOut(ctx *fasthttp.RequestCtx) {
 	accessToken := cookie.Get(ctx, "access_token")
-	if accessToken != "" {
-		userId, err := h.authService.ValidateAccessToken(accessToken)
-		if err == nil && userId != "" {
-			err := h.authService.RevokeTokens(ctx, userId)
-			if err != nil {
-				h.log.Error().Err(err).Str("userId", userId).Msg("failed to revoke tokens during logout")
-			}
+	refreshToken := cookie.Get(ctx, "refresh_token")
+
+	if accessToken == "" {
+		if refreshToken == "" {
+			h.res.SendError(ctx, fasthttp.StatusUnauthorized, "already logged out")
+			return
 		}
+		tokenPair, err := h.authService.ValidateRefreshToken(ctx, refreshToken)
+		if err != nil {
+			h.res.SendError(ctx, fasthttp.StatusUnauthorized, "already logged out")
+			return
+		}
+		accessToken = tokenPair.AccessToken
+	}
+
+	userId, err := h.authService.ValidateAccessToken(accessToken)
+	if err != nil {
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to logged out")
+		return
+	}
+
+	err = h.authService.RevokeTokens(ctx, userId)
+	if err != nil {
+		h.log.Error().Err(err).Str("userId", userId).Msg("failed to revoke tokens during logout")
 	}
 
 	cookie.Delete(ctx, "access_token")

@@ -8,8 +8,8 @@ RETURNING *;
 
 -- name: UpdateUser :one
 UPDATE users
-SET email = $1, address = $2
-WHERE email = $1
+SET name = $1, address = $2
+WHERE id = $3
 RETURNING *;
 
 -- name: GetUserByEmail :one

@@ -70,28 +70,28 @@ func (ValidateSessionResponse_Status) EnumDescriptor() ([]byte, []int) {
 	return file_auth_proto_auth_proto_rawDescGZIP(), []int{4, 0}
 }
 
-type ValidateSessionRequest struct {
+type TokenPair struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	RefrectToken  string                 `protobuf:"bytes,2,opt,name=refrect_token,json=refrectToken,proto3" json:"refrect_token,omitempty"`
+	RefreshToken  string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ValidateSessionRequest) Reset() {
-	*x = ValidateSessionRequest{}
+func (x *TokenPair) Reset() {
+	*x = TokenPair{}
 	mi := &file_auth_proto_auth_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ValidateSessionRequest) String() string {
+func (x *TokenPair) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ValidateSessionRequest) ProtoMessage() {}
+func (*TokenPair) ProtoMessage() {}
 
-func (x *ValidateSessionRequest) ProtoReflect() protoreflect.Message {
+func (x *TokenPair) ProtoReflect() protoreflect.Message {
 	mi := &file_auth_proto_auth_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -103,21 +103,21 @@ func (x *ValidateSessionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ValidateSessionRequest.ProtoReflect.Descriptor instead.
-func (*ValidateSessionRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use TokenPair.ProtoReflect.Descriptor instead.
+func (*TokenPair) Descriptor() ([]byte, []int) {
 	return file_auth_proto_auth_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ValidateSessionRequest) GetAccessToken() string {
+func (x *TokenPair) GetAccessToken() string {
 	if x != nil {
 		return x.AccessToken
 	}
 	return ""
 }
 
-func (x *ValidateSessionRequest) GetRefrectToken() string {
+func (x *TokenPair) GetRefreshToken() string {
 	if x != nil {
-		return x.RefrectToken
+		return x.RefreshToken
 	}
 	return ""
 }
@@ -322,58 +322,6 @@ func (x *ValidateSessionResponse) GetTokenPair() *TokenPair {
 	return nil
 }
 
-type TokenPair struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	RefreshToken  string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TokenPair) Reset() {
-	*x = TokenPair{}
-	mi := &file_auth_proto_auth_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TokenPair) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TokenPair) ProtoMessage() {}
-
-func (x *TokenPair) ProtoReflect() protoreflect.Message {
-	mi := &file_auth_proto_auth_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TokenPair.ProtoReflect.Descriptor instead.
-func (*TokenPair) Descriptor() ([]byte, []int) {
-	return file_auth_proto_auth_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *TokenPair) GetAccessToken() string {
-	if x != nil {
-		return x.AccessToken
-	}
-	return ""
-}
-
-func (x *TokenPair) GetRefreshToken() string {
-	if x != nil {
-		return x.RefreshToken
-	}
-	return ""
-}
-
 type RevokeTokensResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -383,7 +331,7 @@ type RevokeTokensResponse struct {
 
 func (x *RevokeTokensResponse) Reset() {
 	*x = RevokeTokensResponse{}
-	mi := &file_auth_proto_auth_proto_msgTypes[6]
+	mi := &file_auth_proto_auth_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -395,7 +343,7 @@ func (x *RevokeTokensResponse) String() string {
 func (*RevokeTokensResponse) ProtoMessage() {}
 
 func (x *RevokeTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_auth_proto_auth_proto_msgTypes[6]
+	mi := &file_auth_proto_auth_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -408,7 +356,7 @@ func (x *RevokeTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTokensResponse.ProtoReflect.Descriptor instead.
 func (*RevokeTokensResponse) Descriptor() ([]byte, []int) {
-	return file_auth_proto_auth_proto_rawDescGZIP(), []int{6}
+	return file_auth_proto_auth_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RevokeTokensResponse) GetSuccess() bool {
@@ -422,10 +370,10 @@ var File_auth_proto_auth_proto protoreflect.FileDescriptor
 
 const file_auth_proto_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x15auth/proto/auth.proto\x12\x04auth\"`\n" +
-	"\x16ValidateSessionRequest\x12!\n" +
+	"\x15auth/proto/auth.proto\x12\x04auth\"S\n" +
+	"\tTokenPair\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefrect_token\x18\x02 \x01(\tR\frefrectToken\"E\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\"E\n" +
 	"\x14GenerateTokenRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\":\n" +
@@ -444,14 +392,11 @@ const file_auth_proto_auth_proto_rawDesc = "" +
 	"\aINVALID\x10\x02B\n" +
 	"\n" +
 	"\b_user_idB\r\n" +
-	"\v_token_pair\"S\n" +
-	"\tTokenPair\x12!\n" +
-	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\"0\n" +
+	"\v_token_pair\"0\n" +
 	"\x14RevokeTokensResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\xa4\x02\n" +
-	"\vAuthService\x12P\n" +
-	"\x0fValidateSession\x12\x1c.auth.ValidateSessionRequest\x1a\x1d.auth.ValidateSessionResponse\"\x00\x12>\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\x97\x02\n" +
+	"\vAuthService\x12C\n" +
+	"\x0fValidateSession\x12\x0f.auth.TokenPair\x1a\x1d.auth.ValidateSessionResponse\"\x00\x12>\n" +
 	"\rGenerateToken\x12\x1a.auth.GenerateTokenRequest\x1a\x0f.auth.TokenPair\"\x00\x12<\n" +
 	"\fRefreshToken\x12\x19.auth.RefreshTokenRequest\x1a\x0f.auth.TokenPair\"\x00\x12E\n" +
 	"\fRevokeTokens\x12\x19.auth.RevokeTokensRequest\x1a\x1a.auth.RevokeTokensResponseB\fZ\n" +
@@ -470,28 +415,27 @@ func file_auth_proto_auth_proto_rawDescGZIP() []byte {
 }
 
 var file_auth_proto_auth_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_auth_proto_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_auth_proto_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_auth_proto_auth_proto_goTypes = []any{
 	(ValidateSessionResponse_Status)(0), // 0: auth.ValidateSessionResponse.Status
-	(*ValidateSessionRequest)(nil),      // 1: auth.ValidateSessionRequest
+	(*TokenPair)(nil),                   // 1: auth.TokenPair
 	(*GenerateTokenRequest)(nil),        // 2: auth.GenerateTokenRequest
 	(*RefreshTokenRequest)(nil),         // 3: auth.RefreshTokenRequest
 	(*RevokeTokensRequest)(nil),         // 4: auth.RevokeTokensRequest
 	(*ValidateSessionResponse)(nil),     // 5: auth.ValidateSessionResponse
-	(*TokenPair)(nil),                   // 6: auth.TokenPair
-	(*RevokeTokensResponse)(nil),        // 7: auth.RevokeTokensResponse
+	(*RevokeTokensResponse)(nil),        // 6: auth.RevokeTokensResponse
 }
 var file_auth_proto_auth_proto_depIdxs = []int32{
 	0, // 0: auth.ValidateSessionResponse.status:type_name -> auth.ValidateSessionResponse.Status
-	6, // 1: auth.ValidateSessionResponse.token_pair:type_name -> auth.TokenPair
-	1, // 2: auth.AuthService.ValidateSession:input_type -> auth.ValidateSessionRequest
+	1, // 1: auth.ValidateSessionResponse.token_pair:type_name -> auth.TokenPair
+	1, // 2: auth.AuthService.ValidateSession:input_type -> auth.TokenPair
 	2, // 3: auth.AuthService.GenerateToken:input_type -> auth.GenerateTokenRequest
 	3, // 4: auth.AuthService.RefreshToken:input_type -> auth.RefreshTokenRequest
 	4, // 5: auth.AuthService.RevokeTokens:input_type -> auth.RevokeTokensRequest
 	5, // 6: auth.AuthService.ValidateSession:output_type -> auth.ValidateSessionResponse
-	6, // 7: auth.AuthService.GenerateToken:output_type -> auth.TokenPair
-	6, // 8: auth.AuthService.RefreshToken:output_type -> auth.TokenPair
-	7, // 9: auth.AuthService.RevokeTokens:output_type -> auth.RevokeTokensResponse
+	1, // 7: auth.AuthService.GenerateToken:output_type -> auth.TokenPair
+	1, // 8: auth.AuthService.RefreshToken:output_type -> auth.TokenPair
+	6, // 9: auth.AuthService.RevokeTokens:output_type -> auth.RevokeTokensResponse
 	6, // [6:10] is the sub-list for method output_type
 	2, // [2:6] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -511,7 +455,7 @@ func file_auth_proto_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_auth_proto_auth_proto_rawDesc), len(file_auth_proto_auth_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

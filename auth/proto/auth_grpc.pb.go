@@ -29,7 +29,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthServiceClient interface {
-	ValidateSession(ctx context.Context, in *ValidateSessionRequest, opts ...grpc.CallOption) (*ValidateSessionResponse, error)
+	ValidateSession(ctx context.Context, in *TokenPair, opts ...grpc.CallOption) (*ValidateSessionResponse, error)
 	GenerateToken(ctx context.Context, in *GenerateTokenRequest, opts ...grpc.CallOption) (*TokenPair, error)
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*TokenPair, error)
 	RevokeTokens(ctx context.Context, in *RevokeTokensRequest, opts ...grpc.CallOption) (*RevokeTokensResponse, error)
@@ -43,7 +43,7 @@ func NewAuthServiceClient(cc grpc.ClientConnInterface) AuthServiceClient {
 	return &authServiceClient{cc}
 }
 
-func (c *authServiceClient) ValidateSession(ctx context.Context, in *ValidateSessionRequest, opts ...grpc.CallOption) (*ValidateSessionResponse, error) {
+func (c *authServiceClient) ValidateSession(ctx context.Context, in *TokenPair, opts ...grpc.CallOption) (*ValidateSessionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ValidateSessionResponse)
 	err := c.cc.Invoke(ctx, AuthService_ValidateSession_FullMethodName, in, out, cOpts...)
@@ -87,7 +87,7 @@ func (c *authServiceClient) RevokeTokens(ctx context.Context, in *RevokeTokensRe
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
 type AuthServiceServer interface {
-	ValidateSession(context.Context, *ValidateSessionRequest) (*ValidateSessionResponse, error)
+	ValidateSession(context.Context, *TokenPair) (*ValidateSessionResponse, error)
 	GenerateToken(context.Context, *GenerateTokenRequest) (*TokenPair, error)
 	RefreshToken(context.Context, *RefreshTokenRequest) (*TokenPair, error)
 	RevokeTokens(context.Context, *RevokeTokensRequest) (*RevokeTokensResponse, error)
@@ -101,7 +101,7 @@ type AuthServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAuthServiceServer struct{}
 
-func (UnimplementedAuthServiceServer) ValidateSession(context.Context, *ValidateSessionRequest) (*ValidateSessionResponse, error) {
+func (UnimplementedAuthServiceServer) ValidateSession(context.Context, *TokenPair) (*ValidateSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateSession not implemented")
 }
 func (UnimplementedAuthServiceServer) GenerateToken(context.Context, *GenerateTokenRequest) (*TokenPair, error) {
@@ -135,7 +135,7 @@ func RegisterAuthServiceServer(s grpc.ServiceRegistrar, srv AuthServiceServer) {
 }
 
 func _AuthService_ValidateSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ValidateSessionRequest)
+	in := new(TokenPair)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func _AuthService_ValidateSession_Handler(srv interface{}, ctx context.Context, 
 		FullMethod: AuthService_ValidateSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthServiceServer).ValidateSession(ctx, req.(*ValidateSessionRequest))
+		return srv.(AuthServiceServer).ValidateSession(ctx, req.(*TokenPair))
 	}
 	return interceptor(ctx, in, info, handler)
 }

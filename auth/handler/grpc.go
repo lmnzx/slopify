@@ -28,38 +28,36 @@ func NewGrpcHandler(client valkey.Client, log *zerolog.Logger, accountService ac
 	}
 }
 
-func (h *GrpcHandler) ValidateSession(ctx context.Context, req *proto.ValidateSessionRequest) (*proto.ValidateSessionResponse, error) {
-	var newTokenPair *proto.TokenPair
-
+func (h *GrpcHandler) ValidateSession(ctx context.Context, req *proto.TokenPair) (*proto.ValidateSessionResponse, error) {
 	if req.AccessToken == "" {
-		if req.RefrectToken == "" {
+		if req.RefreshToken == "" {
 			return &proto.ValidateSessionResponse{Status: proto.ValidateSessionResponse_EXPIRED}, status.Errorf(codes.Unauthenticated, "no access token provided")
 		}
 
-		tokenPair, err := h.authService.ValidateRefreshToken(ctx, req.RefrectToken)
+		tokenPair, err := h.authService.ValidateRefreshToken(ctx, req.RefreshToken)
 		if err == nil {
 			return &proto.ValidateSessionResponse{Status: proto.ValidateSessionResponse_EXPIRED}, status.Errorf(codes.Unauthenticated, "session expired")
 		}
 
-		newTokenPair.AccessToken = tokenPair.AccessToken
-		if tokenPair.RefreshToken != req.RefrectToken {
-			newTokenPair.RefreshToken = tokenPair.RefreshToken
+		req.AccessToken = tokenPair.AccessToken
+		if tokenPair.RefreshToken != req.RefreshToken {
+			req.RefreshToken = tokenPair.RefreshToken
 		}
 	}
 
-	userId, err := h.authService.ValidateAccessToken(newTokenPair.AccessToken)
+	userId, err := h.authService.ValidateAccessToken(req.AccessToken)
 	if err != nil {
-		if err == internal.ErrTokenExpired && req.RefrectToken != "" {
-			tokenPair, err := h.authService.ValidateRefreshToken(ctx, req.RefrectToken)
+		if err == internal.ErrTokenExpired && req.RefreshToken != "" {
+			tokenPair, err := h.authService.ValidateRefreshToken(ctx, req.RefreshToken)
 			if err == nil {
 				return &proto.ValidateSessionResponse{Status: proto.ValidateSessionResponse_EXPIRED}, status.Errorf(codes.Unauthenticated, "session expired")
 			}
 
-			newTokenPair.AccessToken = tokenPair.AccessToken
-			if tokenPair.RefreshToken != req.RefrectToken {
-				newTokenPair.RefreshToken = tokenPair.RefreshToken
+			req.AccessToken = tokenPair.AccessToken
+			if tokenPair.RefreshToken != req.RefreshToken {
+				req.RefreshToken = tokenPair.RefreshToken
 			}
-			userId, err = h.authService.ValidateAccessToken(newTokenPair.AccessToken)
+			userId, err = h.authService.ValidateAccessToken(req.AccessToken)
 			if err != nil {
 				return &proto.ValidateSessionResponse{Status: proto.ValidateSessionResponse_INVALID}, status.Errorf(codes.Unauthenticated, "invalid session data")
 			}
@@ -72,7 +70,7 @@ func (h *GrpcHandler) ValidateSession(ctx context.Context, req *proto.ValidateSe
 	return &proto.ValidateSessionResponse{
 		Status:    proto.ValidateSessionResponse_VALID,
 		UserId:    &userId,
-		TokenPair: newTokenPair,
+		TokenPair: req,
 	}, nil
 }
 

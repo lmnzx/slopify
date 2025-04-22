@@ -91,18 +91,19 @@ func (q *Queries) GetUserById(ctx context.Context, id uuid.UUID) (User, error) {
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET email = $1, address = $2
-WHERE email = $1
+SET name = $1, address = $2
+WHERE id = $3
 RETURNING id, name, email, address, password, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	Email   string `json:"email"`
-	Address string `json:"address"`
+	Name    string    `json:"name"`
+	Address string    `json:"address"`
+	ID      uuid.UUID `json:"id"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser, arg.Email, arg.Address)
+	row := q.db.QueryRow(ctx, updateUser, arg.Name, arg.Address, arg.ID)
 	var i User
 	err := row.Scan(
 		&i.ID,

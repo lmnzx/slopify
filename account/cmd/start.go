@@ -14,6 +14,8 @@ import (
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/logger"
+	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/response"
 
 	"github.com/fasthttp/router"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -122,8 +124,9 @@ func startRestServer(ctx context.Context, queries *repository.Queries, auth auth
 
 	r := router.New()
 	handler := handler.NewRestHandler(queries, auth, &log)
+	authMw := middleware.AuthMiddleware(auth, &log, response.NewResponseSender(&log))
 	r.GET("/health", healthHandler)
-	r.POST("/update", handler.Update)
+	r.POST("/update", authMw(handler.Update))
 
 	server := &fasthttp.Server{
 		Handler: logger.RequestLogger(r.Handler),

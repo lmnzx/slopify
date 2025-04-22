@@ -2,12 +2,12 @@ package handler
 
 import (
 	"encoding/json"
-	"time"
 
-	"github.com/lmnzx/slopify/account/client"
+	"github.com/google/uuid"
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
-	"github.com/lmnzx/slopify/pkg/cookie"
+	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/response"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 )
@@ -15,23 +15,27 @@ import (
 type RestHandler struct {
 	queries     *repository.Queries
 	authService auth.AuthServiceClient
+	res         *response.ResponseSender
 	log         *zerolog.Logger
 }
 
-func NewRestHandler(queries *repository.Queries, a auth.AuthServiceClient, l *zerolog.Logger) *RestHandler {
+func NewRestHandler(queries *repository.Queries, authService auth.AuthServiceClient, log *zerolog.Logger) *RestHandler {
 	return &RestHandler{
 		queries:     queries,
-		authService: a,
-		log:         l,
+		authService: authService,
+		log:         log,
+		res:         response.NewResponseSender(log),
 	}
 }
 
 type UpdateRequest struct {
-	Email   string `json:"email"`
+	Name    string `json:"name"`
 	Address string `json:"address"`
 }
 
 func (h *RestHandler) Update(ctx *fasthttp.RequestCtx) {
+	user_id := middleware.GetUserIDFromCtx(ctx)
+
 	body := ctx.Request.Body()
 	if len(body) == 0 {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
@@ -43,42 +47,24 @@ func (h *RestHandler) Update(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		return
 	}
-	// TODO: auth middleware
-	access_token := cookie.Get(ctx, "access_token")
-	user_id := client.ValidateAccessToken(ctx, *h.log, h.authService, access_token)
-	if user_id == "" {
-		h.log.Info().Msg("no user was found with access_token trying refresh_token")
 
-		refresh_token := cookie.Get(ctx, "refresh_token")
-		tokenPair, err := client.ValidateRefreshToken(ctx, *h.log, h.authService, refresh_token)
-		if err != nil {
-			h.log.Error().Err(err).Msg("no user was found with refresh_token try login")
-			ctx.Response.SetStatusCode(fasthttp.StatusForbidden)
-			return
-		}
-
-		cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", time.Minute*15, false, fasthttp.CookieSameSiteDefaultMode)
-		cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", time.Hour*24*7, false, fasthttp.CookieSameSiteDefaultMode)
-
+	id, err := uuid.Parse(user_id)
+	if err != nil {
+		h.log.Error().Err(err).Str("user_id", user_id).Msg("could not parse the user_id")
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "could not parse the user_id")
+		return
 	}
 
-	// changes the email token need to update
-	updatedUser, err := h.queries.UpdateUser(ctx, repository.UpdateUserParams{Email: parsedBody.Email, Address: parsedBody.Address})
+	updatedUser, err := h.queries.UpdateUser(ctx, repository.UpdateUserParams{ID: id, Name: parsedBody.Name, Address: parsedBody.Address})
 	if err != nil {
 		h.log.Error().Err(err).Str("user_id", user_id).Msg("could not update the user")
-		ctx.Response.SetStatusCode(fasthttp.StatusInternalServerError)
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "could not update the user")
 		return
 	}
 
-	newTokenPair, err := client.GenerateTokenPair(ctx, *h.log, h.authService, updatedUser.ID.String(), updatedUser.Email)
-	if err != nil {
-		h.log.Error().Err(err).Str("user_id", user_id).Msg("could generate token pair for the updated user")
-		ctx.Response.SetStatusCode(fasthttp.StatusInternalServerError)
-		return
-	}
-
-	cookie.Set(ctx, "access_token", newTokenPair.AccessToken, "/", "", time.Minute*15, false, fasthttp.CookieSameSiteDefaultMode)
-	cookie.Set(ctx, "refresh_token", newTokenPair.RefreshToken, "/", "", time.Hour*24*7, false, fasthttp.CookieSameSiteDefaultMode)
-
-	ctx.Response.SetBodyString(`{"message": "user updated"}`)
+	h.res.SendSuccess(ctx, fasthttp.StatusOK, map[string]string{
+		"user_id": updatedUser.ID.String(),
+		"name":    updatedUser.Email,
+		"address": updatedUser.Address,
+	})
 }
