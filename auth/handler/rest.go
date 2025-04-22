@@ -7,23 +7,30 @@ import (
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/pkg/cookie"
+	"github.com/lmnzx/slopify/pkg/response"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valyala/fasthttp"
 )
 
 type RestHandler struct {
-	service        internal.AuthService
+	authService    internal.AuthService
 	accountService account.AccountServiceClient
+	res            *response.ResponseSender
 	log            *zerolog.Logger
 }
 
-func NewRestHandler(client valkey.Client, l *zerolog.Logger, a account.AccountServiceClient) *RestHandler {
+func NewRestHandler(valkeyClient valkey.Client, log *zerolog.Logger, accountService account.AccountServiceClient) *RestHandler {
 	return &RestHandler{
-		service:        *internal.NewAuthService(client, l),
-		accountService: a,
-		log:            l,
+		authService:    *internal.NewAuthService(valkeyClient, log),
+		accountService: accountService,
+		res:            response.NewResponseSender(log),
+		log:            log,
 	}
+}
+
+func (h *RestHandler) HealthCheck(ctx *fasthttp.RequestCtx) {
+	h.res.SendSuccess(ctx, fasthttp.StatusOK, "all ok")
 }
 
 type SignUpRequest struct {
@@ -36,23 +43,29 @@ type SignUpRequest struct {
 func (h *RestHandler) SignUp(ctx *fasthttp.RequestCtx) {
 	body := ctx.Request.Body()
 	if len(body) == 0 {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "request body cannot be empty")
 		return
 	}
 
 	var parsedBody SignUpRequest
 	if err := json.Unmarshal(body, &parsedBody); err != nil {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "invalid request format")
+		return
+	}
+
+	if parsedBody.Email == "" || parsedBody.Password == "" || parsedBody.Name == "" {
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "name, email, and password are required")
 		return
 	}
 
 	user, err := client.GetUser(ctx, h.log, h.accountService, parsedBody.Email)
 	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		h.log.Error().Err(err).Str("email", parsedBody.Email).Msg("error checking existing user")
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "error checking existing user")
 		return
 	}
 	if user.UserId != "" {
-		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		h.res.SendError(ctx, fasthttp.StatusConflict, "user already exists")
 		return
 	}
 
@@ -65,19 +78,25 @@ func (h *RestHandler) SignUp(ctx *fasthttp.RequestCtx) {
 
 	createdUser, err := client.CreateUser(ctx, h.log, h.accountService, &req)
 	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		h.log.Error().Err(err).Str("email", parsedBody.Email).Msg("failed to create user")
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to create user")
 		return
 	}
-	tokenPair, err := h.service.GenerateTokenPair(ctx, createdUser.UserId, createdUser.Email)
+
+	tokenPair, err := h.authService.GenerateTokenPair(ctx, createdUser.UserId, createdUser.Email)
 	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		h.log.Error().Err(err).Str("userId", createdUser.UserId).Msg("failed to generate tokens")
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to generate authentication tokens")
 		return
 	}
 
 	cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
 	cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
 
-	ctx.Response.SetBodyString(`{"message": "welcome"}`)
+	h.res.SendSuccess(ctx, fasthttp.StatusCreated, map[string]string{
+		"user_id": createdUser.UserId,
+		"email":   createdUser.Email,
+	})
 }
 
 type LogInRequest struct {
@@ -88,13 +107,18 @@ type LogInRequest struct {
 func (h *RestHandler) LogIn(ctx *fasthttp.RequestCtx) {
 	body := ctx.Request.Body()
 	if len(body) == 0 {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "request body cannot be empty")
 		return
 	}
 
 	var parsedBody LogInRequest
 	if err := json.Unmarshal(body, &parsedBody); err != nil {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "invalid request format")
+		return
+	}
+
+	if parsedBody.Email == "" || parsedBody.Password == "" {
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "email and password are required")
 		return
 	}
 
@@ -106,35 +130,134 @@ func (h *RestHandler) LogIn(ctx *fasthttp.RequestCtx) {
 	isValid := client.CheckPassword(ctx, h.log, h.accountService, checkPasswordReq)
 
 	if !isValid {
-		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		h.res.SendError(ctx, fasthttp.StatusUnauthorized, "invalid email or password")
+		h.log.Error().Str("email", parsedBody.Email).Msg("user invalid credentials")
 		return
 	}
 
 	user, err := client.GetUser(ctx, h.log, h.accountService, parsedBody.Email)
 	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		h.log.Error().Err(err).Str("email", parsedBody.Email).Msg("failed to fetch user")
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to fetch user details")
 		return
 	}
-	if user.UserId == "" {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	if user == nil || user.UserId == "" {
+		h.res.SendError(ctx, fasthttp.StatusNotFound, "user not found")
 		return
 	}
 
-	tokenPair, err := h.service.GenerateTokenPair(ctx, user.UserId, user.Email)
+	tokenPair, err := h.authService.GenerateTokenPair(ctx, user.UserId, user.Email)
 	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		h.log.Error().Err(err).Str("userId", user.UserId).Msg("failed to generate tokens")
+		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to generate authentication tokens")
 		return
 	}
 
 	cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
 	cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
 
-	ctx.Response.SetBodyString(`{"message": "welcome back"}`)
+	h.res.SendSuccess(ctx, fasthttp.StatusCreated, map[string]string{
+		"user_id": user.UserId,
+		"email":   user.Email,
+	})
 }
 
 func (h *RestHandler) LogOut(ctx *fasthttp.RequestCtx) {
+	accessToken := cookie.Get(ctx, "access_token")
+	if accessToken != "" {
+		userId, err := h.authService.ValidateAccessToken(accessToken)
+		if err == nil && userId != "" {
+			err := h.authService.RevokeTokens(ctx, userId)
+			if err != nil {
+				h.log.Error().Err(err).Str("userId", userId).Msg("failed to revoke tokens during logout")
+			}
+		}
+	}
+
 	cookie.Delete(ctx, "access_token")
 	cookie.Delete(ctx, "refresh_token")
 
-	ctx.Response.SetBodyString(`{"message": "good bye"}`)
+	h.res.SendSuccess(ctx, fasthttp.StatusCreated, map[string]string{
+		"message": "logged out successfully",
+	})
+}
+
+func (h *RestHandler) RefreshTokens(ctx *fasthttp.RequestCtx) {
+	refreshToken := cookie.Get(ctx, "refresh_token")
+	if refreshToken == "" {
+		h.res.SendError(ctx, fasthttp.StatusUnauthorized, "refresh token is required")
+		return
+	}
+
+	tokenPair, err := h.authService.ValidateRefreshToken(ctx, refreshToken)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to validate refresh token")
+		h.res.SendError(ctx, fasthttp.StatusUnauthorized, "invalid or expired refresh token")
+		return
+	}
+
+	cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+
+	// Only set refresh token if it's different (a new one was generated)
+	if tokenPair.RefreshToken != refreshToken {
+		cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+	}
+
+	h.res.SendSuccess(ctx, fasthttp.StatusCreated, map[string]string{
+		"message": "tokens refreshed successfully",
+	})
+}
+
+func (h *RestHandler) ValidateSession(ctx *fasthttp.RequestCtx) {
+	accessToken := cookie.Get(ctx, "access_token")
+	refreshToken := cookie.Get(ctx, "refresh_token")
+
+	if accessToken == "" {
+		if refreshToken == "" {
+			h.res.SendError(ctx, fasthttp.StatusUnauthorized, "no access token provided")
+			return
+		}
+
+		tokenPair, err := h.authService.ValidateRefreshToken(ctx, refreshToken)
+		if err != nil {
+			h.res.SendError(ctx, fasthttp.StatusUnauthorized, "session expired")
+			return
+		}
+
+		cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+		if tokenPair.RefreshToken != refreshToken {
+			cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+		}
+		accessToken = tokenPair.AccessToken
+	}
+
+	userId, err := h.authService.ValidateAccessToken(accessToken)
+	if err != nil {
+		if err == internal.ErrTokenExpired && refreshToken != "" {
+			tokenPair, err := h.authService.ValidateRefreshToken(ctx, refreshToken)
+			if err != nil {
+				h.res.SendError(ctx, fasthttp.StatusUnauthorized, "session expired")
+				return
+			}
+
+			cookie.Set(ctx, "access_token", tokenPair.AccessToken, "/", "", internal.AccessTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+			if tokenPair.RefreshToken != refreshToken {
+				cookie.Set(ctx, "refresh_token", tokenPair.RefreshToken, "/", "", internal.RefreshTokenExpiry, false, fasthttp.CookieSameSiteDefaultMode)
+			}
+
+			userId, err = h.authService.ValidateAccessToken(tokenPair.AccessToken)
+			if err != nil {
+				h.log.Error().Err(err).Msg("failed to validate new access token")
+				h.res.SendError(ctx, fasthttp.StatusInternalServerError, "error validating session")
+				return
+			}
+		} else {
+			h.res.SendError(ctx, fasthttp.StatusUnauthorized, "invalid session")
+			return
+		}
+	}
+
+	h.res.SendSuccess(ctx, fasthttp.StatusCreated, map[string]string{
+		"user_id": userId,
+	})
 }

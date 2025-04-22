@@ -5,13 +5,15 @@ package auth;
 option go_package = "auth/proto";
 
 service AuthService {
-    rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse) {}
+    rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse) {}
     rpc GenerateToken(GenerateTokenRequest) returns (TokenPair) {}
     rpc RefreshToken(RefreshTokenRequest) returns (TokenPair) {}
+    rpc RevokeTokens(RevokeTokensRequest) returns (RevokeTokensResponse);
 }
 
-message ValidateTokenRequest {
+message ValidateSessionRequest {
     string access_token = 1;
+    string refrect_token = 2;
 }
 
 message GenerateTokenRequest {
@@ -23,7 +25,11 @@ message RefreshTokenRequest {
     string refresh_token = 1;
 }
 
-message ValidateTokenResponse {
+message RevokeTokensRequest {
+  string user_id = 1;
+}
+
+message ValidateSessionResponse {
   enum Status {
         VALID = 0;
         EXPIRED = 1;
@@ -31,9 +37,14 @@ message ValidateTokenResponse {
     }
     Status status = 1;
     optional string user_id = 2;
+    optional TokenPair token_pair= 3;
 }
 
 message TokenPair {
     string access_token = 1;
     string refresh_token = 2;
+}
+
+message RevokeTokensResponse {
+  bool success = 1;
 }

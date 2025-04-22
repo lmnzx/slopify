@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -109,20 +108,16 @@ func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, accountSer
 	}
 }
 
-func healthHandler(ctx *fasthttp.RequestCtx) {
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	ctx.SetContentType("text/plain; charset=utf8")
-	fmt.Fprintf(ctx, "OK")
-}
-
 func startRestServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, log *zerolog.Logger, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	h := handler.NewRestHandler(valkeyClient, log, accountService)
 	r := router.New()
-	r.GET("/health", healthHandler)
+	r.GET("/health", h.HealthCheck)
 	r.POST("/signup", h.SignUp)
 	r.POST("/login", h.LogIn)
+	r.GET("/validate", h.ValidateSession)
+	r.POST("/refresh", h.RefreshTokens)
 	r.GET("/logout", h.LogOut)
 
 	server := &fasthttp.Server{
