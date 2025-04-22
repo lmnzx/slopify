@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -13,13 +12,10 @@ import (
 	"github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
-	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/lmnzx/slopify/pkg/middleware"
-	"github.com/lmnzx/slopify/pkg/response"
 
 	"github.com/fasthttp/router"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -27,7 +23,7 @@ import (
 )
 
 func main() {
-	log := logger.Get()
+	log := middleware.GetLogger()
 
 	dbpool, err := pgxpool.New(context.Background(), "postgresql://postgres:postgres@localhost:5432/slopify?sslmode=disable")
 	if err != nil {
@@ -56,10 +52,10 @@ func main() {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go startGrpcServer(ctx, queries, c, log, &wg)
+	go startGrpcServer(ctx, queries, &wg)
 
 	wg.Add(1)
-	go startRestServer(ctx, queries, c, log, &wg)
+	go startRestServer(ctx, queries, c, &wg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -71,8 +67,10 @@ func main() {
 	wg.Wait()
 }
 
-func startGrpcServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, log zerolog.Logger, wg *sync.WaitGroup) {
+func startGrpcServer(ctx context.Context, queries *repository.Queries, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	log := middleware.GetLogger()
 
 	lis, err := net.Listen("tcp", ":3000")
 	if err != nil {
@@ -81,7 +79,7 @@ func startGrpcServer(ctx context.Context, queries *repository.Queries, auth auth
 	}
 
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(logger.UnaryServerInterceptor()),
+		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
 	)
 
 	h := handler.NewGrpcHandler(queries)
@@ -113,25 +111,22 @@ func startGrpcServer(ctx context.Context, queries *repository.Queries, auth auth
 	}
 }
 
-func healthHandler(ctx *fasthttp.RequestCtx) {
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	ctx.SetContentType("text/plain; charset=utf8")
-	fmt.Fprintf(ctx, "OK")
-}
-
-func startRestServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, log zerolog.Logger, wg *sync.WaitGroup) {
+func startRestServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := router.New()
-	handler := handler.NewRestHandler(queries, auth, &log)
-	authMw := middleware.AuthMiddleware(auth, &log, response.NewResponseSender(&log))
-	r.GET("/health", healthHandler)
+
+	handler := handler.NewRestHandler(queries, auth)
+	authMw := middleware.AuthMiddleware(auth)
+
+	r.GET("/health", handler.HealthCheck)
 	r.POST("/update", authMw(handler.Update))
 
 	server := &fasthttp.Server{
-		Handler: logger.RequestLogger(r.Handler),
+		Handler: middleware.RequestLogger(r.Handler),
 	}
 
+	log := middleware.GetLogger()
 	serveErrCh := make(chan error, 1)
 	go func() {
 		restAddr := ":9000"

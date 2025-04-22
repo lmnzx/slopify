@@ -16,21 +16,25 @@ type RestHandler struct {
 	queries     *repository.Queries
 	authService auth.AuthServiceClient
 	res         *response.ResponseSender
-	log         *zerolog.Logger
+	log         zerolog.Logger
 }
 
-func NewRestHandler(queries *repository.Queries, authService auth.AuthServiceClient, log *zerolog.Logger) *RestHandler {
+func NewRestHandler(queries *repository.Queries, authService auth.AuthServiceClient) *RestHandler {
 	return &RestHandler{
 		queries:     queries,
 		authService: authService,
-		log:         log,
-		res:         response.NewResponseSender(log),
+		log:         middleware.GetLogger(),
+		res:         response.NewResponseSender(),
 	}
 }
 
 type UpdateRequest struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`
+}
+
+func (h *RestHandler) HealthCheck(ctx *fasthttp.RequestCtx) {
+	h.res.SendSuccess(ctx, fasthttp.StatusOK, "all ok")
 }
 
 func (h *RestHandler) Update(ctx *fasthttp.RequestCtx) {

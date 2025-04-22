@@ -3,18 +3,13 @@ package response
 import (
 	"encoding/json"
 
-	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 )
 
-type ResponseSender struct {
-	log *zerolog.Logger
-}
+type ResponseSender struct{}
 
-func NewResponseSender(log *zerolog.Logger) *ResponseSender {
-	return &ResponseSender{
-		log: log,
-	}
+func NewResponseSender() *ResponseSender {
+	return &ResponseSender{}
 }
 
 func (rs *ResponseSender) Send(ctx *fasthttp.RequestCtx, statusCode int, payload any) {
@@ -24,7 +19,6 @@ func (rs *ResponseSender) Send(ctx *fasthttp.RequestCtx, statusCode int, payload
 	if payload != nil {
 		responseBody, err := json.Marshal(payload)
 		if err != nil {
-			rs.log.Error().Err(err).Msg("Failed to marshal response")
 			ctx.Response.SetStatusCode(fasthttp.StatusInternalServerError)
 			ctx.Response.SetBodyString(`{"success":false,"error":"Internal server error"}`)
 			return

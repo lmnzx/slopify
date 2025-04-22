@@ -11,10 +11,9 @@ import (
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/handler"
 	"github.com/lmnzx/slopify/auth/proto"
-	"github.com/lmnzx/slopify/pkg/logger"
+	"github.com/lmnzx/slopify/pkg/middleware"
 
 	"github.com/fasthttp/router"
-	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
@@ -23,7 +22,7 @@ import (
 )
 
 func main() {
-	log := logger.Get()
+	log := middleware.GetLogger()
 
 	valkeyClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress: []string{"127.0.0.1:6379"},
@@ -51,10 +50,10 @@ func main() {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go startGrpcServer(ctx, valkeyClient, c, &log, &wg)
+	go startGrpcServer(ctx, valkeyClient, c, &wg)
 
 	wg.Add(1)
-	go startRestServer(ctx, valkeyClient, c, &log, &wg)
+	go startRestServer(ctx, valkeyClient, c, &wg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -66,8 +65,10 @@ func main() {
 	wg.Wait()
 }
 
-func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, log *zerolog.Logger, wg *sync.WaitGroup) {
+func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	log := middleware.GetLogger()
 
 	lis, err := net.Listen("tcp", ":8000")
 	if err != nil {
@@ -76,10 +77,10 @@ func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, accountSer
 	}
 
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(logger.UnaryServerInterceptor()),
+		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
 	)
 
-	h := handler.NewGrpcHandler(valkeyClient, log, accountService)
+	h := handler.NewGrpcHandler(valkeyClient, accountService)
 	proto.RegisterAuthServiceServer(s, h)
 	reflection.Register(s)
 
@@ -108,10 +109,12 @@ func startGrpcServer(ctx context.Context, valkeyClient valkey.Client, accountSer
 	}
 }
 
-func startRestServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, log *zerolog.Logger, wg *sync.WaitGroup) {
+func startRestServer(ctx context.Context, valkeyClient valkey.Client, accountService account.AccountServiceClient, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	h := handler.NewRestHandler(valkeyClient, log, accountService)
+	log := middleware.GetLogger()
+
+	h := handler.NewRestHandler(valkeyClient, accountService)
 	r := router.New()
 	r.GET("/health", h.HealthCheck)
 	r.POST("/signup", h.SignUp)
@@ -121,7 +124,7 @@ func startRestServer(ctx context.Context, valkeyClient valkey.Client, accountSer
 	r.GET("/logout", h.LogOut)
 
 	server := &fasthttp.Server{
-		Handler: logger.RequestLogger(r.Handler),
+		Handler: middleware.RequestLogger(r.Handler),
 	}
 
 	serveErrCh := make(chan error, 1)

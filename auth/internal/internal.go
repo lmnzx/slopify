@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 )
@@ -38,7 +39,7 @@ type TokenPair struct {
 
 type AuthService struct {
 	kv      valkey.Client
-	l       *zerolog.Logger
+	log     zerolog.Logger
 	authCfg AuthConfig
 }
 
@@ -50,10 +51,10 @@ var (
 	ErrTokenMismatch      = errors.New("token does not match stored token")
 )
 
-func NewAuthService(kv valkey.Client, l *zerolog.Logger) *AuthService {
+func NewAuthService(kv valkey.Client) *AuthService {
 	return &AuthService{
-		kv: kv,
-		l:  l,
+		kv:  kv,
+		log: middleware.GetLogger(),
 		authCfg: AuthConfig{
 			AccessTokenSecret:  "test",
 			RefreshTokenSecret: "test",
@@ -66,29 +67,29 @@ func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*
 		return []byte(s.authCfg.AccessTokenSecret), nil
 	})
 	if err != nil {
-		s.l.Error().Err(err).Msg("invalid token")
+		s.log.Error().Err(err).Msg("invalid token")
 		return nil, ErrInvalidToken
 	}
 
 	claims, ok := refreshToken.Claims.(*Claims)
 	if !ok || !refreshToken.Valid {
-		s.l.Error().Msg("invalid token claims format")
+		s.log.Error().Msg("invalid token claims format")
 		return nil, ErrInvalidTokenClaims
 	}
 
 	if claims.Type != RefreshTokenType {
-		s.l.Error().Str("type", claims.Type).Msg("invalid token type")
+		s.log.Error().Str("type", claims.Type).Msg("invalid token type")
 		return nil, ErrInvalidTokenClaims
 	}
 
 	storedToken, err := s.kv.Do(ctx, s.kv.B().Get().Key(claims.UserID).Build()).ToString()
 	if err != nil {
-		s.l.Error().Err(err).Str("userId", claims.UserID).Msg("failed to get stored token")
+		s.log.Error().Err(err).Str("userId", claims.UserID).Msg("failed to get stored token")
 		return nil, ErrTokenNotFound
 	}
 
 	if storedToken != token {
-		s.l.Error().Str("userId", claims.UserID).Msg("token doesn't match stored token")
+		s.log.Error().Str("userId", claims.UserID).Msg("token doesn't match stored token")
 		return nil, ErrTokenMismatch
 	}
 
@@ -101,7 +102,7 @@ func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*
 	timeUntilExpiry := time.Until(claims.ExpiresAt.Time)
 
 	if timeUntilExpiry < RefreshTokenReuseThreshold {
-		s.l.Info().Str("userId", claims.UserID).Dur("timeUntilExpiry", timeUntilExpiry).Msg("refresh token close to expiry, generating new one")
+		s.log.Info().Str("userId", claims.UserID).Dur("timeUntilExpiry", timeUntilExpiry).Msg("refresh token close to expiry, generating new one")
 
 		newRefreshToken, err := s.generateRefreshToken(ctx, claims.UserID, claims.Email)
 		if err != nil {
@@ -109,7 +110,7 @@ func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*
 		}
 		refreshTokenString = newRefreshToken
 	} else {
-		s.l.Info().Str("userId", claims.UserID).Dur("timeUntilExpiry", timeUntilExpiry).Msg("reusing existing refresh token")
+		s.log.Info().Str("userId", claims.UserID).Dur("timeUntilExpiry", timeUntilExpiry).Msg("reusing existing refresh token")
 		refreshTokenString = storedToken
 	}
 
@@ -127,13 +128,13 @@ func (s *AuthService) ValidateAccessToken(token string) (string, error) {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return "", ErrTokenExpired
 		}
-		s.l.Error().Err(err).Msg("invalid access token")
+		s.log.Error().Err(err).Msg("invalid access token")
 		return "", ErrInvalidToken
 	}
 
 	claims, ok := accessToken.Claims.(*Claims)
 	if !ok || !accessToken.Valid || claims.Type != AccessTokenType {
-		s.l.Error().Err(err).Msg("invalid token claims")
+		s.log.Error().Err(err).Msg("invalid token claims")
 		return "", ErrInvalidTokenClaims
 	}
 
@@ -160,7 +161,7 @@ func (s *AuthService) GenerateTokenPair(ctx context.Context, userID, email strin
 func (s *AuthService) RevokeTokens(ctx context.Context, userID string) error {
 	result := s.kv.Do(ctx, s.kv.B().Del().Key(userID).Build())
 	if result.Error() != nil {
-		s.l.Error().Err(result.Error()).Str("userId", userID).Msg("failed to revoke tokens")
+		s.log.Error().Err(result.Error()).Str("userId", userID).Msg("failed to revoke tokens")
 		return result.Error()
 	}
 	return nil
@@ -183,7 +184,7 @@ func (s *AuthService) generateAccessToken(userID, email string) (string, error) 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessTokenClaims)
 	accessTokenString, err := accessToken.SignedString([]byte(s.authCfg.AccessTokenSecret))
 	if err != nil {
-		s.l.Error().Err(err).Msg("failed to create access token")
+		s.log.Error().Err(err).Msg("failed to create access token")
 		return "", err
 	}
 
@@ -207,7 +208,7 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, userID, email st
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshTokenClaims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(s.authCfg.RefreshTokenSecret))
 	if err != nil {
-		s.l.Error().Err(err).Msg("failed to create refresh token")
+		s.log.Error().Err(err).Msg("failed to create refresh token")
 		return "", err
 	}
 

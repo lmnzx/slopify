@@ -6,7 +6,6 @@ import (
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/cookie"
 	"github.com/lmnzx/slopify/pkg/response"
-	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 )
 
@@ -14,15 +13,18 @@ type ctxKey string
 
 const UserIDCtxKey ctxKey = "userID"
 
-func AuthMiddleware(authService auth.AuthServiceClient, log *zerolog.Logger, res *response.ResponseSender) func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
+			log := GetLogger()
+			res := response.NewResponseSender()
+
 			log.Info().Msg("auth middleware executing")
 
 			accessToken := cookie.Get(ctx, "access_token")
 			refreshToken := cookie.Get(ctx, "refresh_token")
 
-			if accessToken == "" || refreshToken == "" {
+			if accessToken == "" && refreshToken == "" {
 				log.Warn().Msg("authMiddleware: access or refresh token missing from cookies")
 				res.SendError(ctx, fasthttp.StatusUnauthorized, "Missing authentication tokens")
 				return

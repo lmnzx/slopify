@@ -7,6 +7,7 @@ import (
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/pkg/cookie"
+	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
@@ -17,15 +18,15 @@ type RestHandler struct {
 	authService    internal.AuthService
 	accountService account.AccountServiceClient
 	res            *response.ResponseSender
-	log            *zerolog.Logger
+	log            zerolog.Logger
 }
 
-func NewRestHandler(valkeyClient valkey.Client, log *zerolog.Logger, accountService account.AccountServiceClient) *RestHandler {
+func NewRestHandler(valkeyClient valkey.Client, accountService account.AccountServiceClient) *RestHandler {
 	return &RestHandler{
-		authService:    *internal.NewAuthService(valkeyClient, log),
+		authService:    *internal.NewAuthService(valkeyClient),
 		accountService: accountService,
-		res:            response.NewResponseSender(log),
-		log:            log,
+		res:            response.NewResponseSender(),
+		log:            middleware.GetLogger(),
 	}
 }
 
@@ -58,7 +59,7 @@ func (h *RestHandler) SignUp(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	user, err := client.GetUser(ctx, h.log, h.accountService, parsedBody.Email)
+	user, err := client.GetUser(ctx, h.accountService, parsedBody.Email)
 	if err != nil {
 		h.log.Error().Err(err).Str("email", parsedBody.Email).Msg("error checking existing user")
 		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "error checking existing user")
@@ -76,7 +77,7 @@ func (h *RestHandler) SignUp(ctx *fasthttp.RequestCtx) {
 		Address:  parsedBody.Address,
 	}
 
-	createdUser, err := client.CreateUser(ctx, h.log, h.accountService, &req)
+	createdUser, err := client.CreateUser(ctx, h.accountService, &req)
 	if err != nil {
 		h.log.Error().Err(err).Str("email", parsedBody.Email).Msg("failed to create user")
 		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to create user")
@@ -127,7 +128,7 @@ func (h *RestHandler) LogIn(ctx *fasthttp.RequestCtx) {
 		Password: parsedBody.Password,
 	}
 
-	isValid := client.CheckPassword(ctx, h.log, h.accountService, checkPasswordReq)
+	isValid := client.CheckPassword(ctx, h.accountService, checkPasswordReq)
 
 	if !isValid {
 		h.res.SendError(ctx, fasthttp.StatusUnauthorized, "invalid email or password")
@@ -135,7 +136,7 @@ func (h *RestHandler) LogIn(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	user, err := client.GetUser(ctx, h.log, h.accountService, parsedBody.Email)
+	user, err := client.GetUser(ctx, h.accountService, parsedBody.Email)
 	if err != nil {
 		h.log.Error().Err(err).Str("email", parsedBody.Email).Msg("failed to fetch user")
 		h.res.SendError(ctx, fasthttp.StatusInternalServerError, "failed to fetch user details")

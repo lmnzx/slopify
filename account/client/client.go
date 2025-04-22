@@ -6,12 +6,14 @@ import (
 	"time"
 
 	auth "github.com/lmnzx/slopify/auth/proto"
-	"github.com/rs/zerolog"
+	"github.com/lmnzx/slopify/pkg/middleware"
 )
 
-func ValidateSession(ctx context.Context, log *zerolog.Logger, c auth.AuthServiceClient, tokenPair *auth.TokenPair) (string, *auth.TokenPair) {
+func ValidateSession(ctx context.Context, c auth.AuthServiceClient, tokenPair *auth.TokenPair) (string, *auth.TokenPair) {
 	ctx, cancle := context.WithTimeout(ctx, time.Second*5)
 	defer cancle()
+
+	log := middleware.GetLogger()
 
 	r, err := c.ValidateSession(ctx, tokenPair)
 

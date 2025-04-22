@@ -7,6 +7,7 @@ import (
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/auth/proto"
+	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"google.golang.org/grpc/codes"
@@ -17,14 +18,14 @@ type GrpcHandler struct {
 	proto.UnimplementedAuthServiceServer
 	authService    internal.AuthService
 	accountService account.AccountServiceClient
-	log            *zerolog.Logger
+	log            zerolog.Logger
 }
 
-func NewGrpcHandler(client valkey.Client, log *zerolog.Logger, accountService account.AccountServiceClient) *GrpcHandler {
+func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceClient) *GrpcHandler {
 	return &GrpcHandler{
-		authService:    *internal.NewAuthService(client, log),
+		authService:    *internal.NewAuthService(client),
 		accountService: accountService,
-		log:            log,
+		log:            middleware.GetLogger(),
 	}
 }
 
@@ -35,7 +36,7 @@ func (h *GrpcHandler) ValidateSession(ctx context.Context, req *proto.TokenPair)
 		}
 
 		tokenPair, err := h.authService.ValidateRefreshToken(ctx, req.RefreshToken)
-		if err == nil {
+		if err != nil {
 			return &proto.ValidateSessionResponse{Status: proto.ValidateSessionResponse_EXPIRED}, status.Errorf(codes.Unauthenticated, "session expired")
 		}
 
@@ -49,7 +50,7 @@ func (h *GrpcHandler) ValidateSession(ctx context.Context, req *proto.TokenPair)
 	if err != nil {
 		if err == internal.ErrTokenExpired && req.RefreshToken != "" {
 			tokenPair, err := h.authService.ValidateRefreshToken(ctx, req.RefreshToken)
-			if err == nil {
+			if err != nil {
 				return &proto.ValidateSessionResponse{Status: proto.ValidateSessionResponse_EXPIRED}, status.Errorf(codes.Unauthenticated, "session expired")
 			}
 
@@ -79,7 +80,7 @@ func (h *GrpcHandler) GenerateToken(ctx context.Context, req *proto.GenerateToke
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
 
-	user, err := client.GetUser(ctx, h.log, h.accountService, req.Email)
+	user, err := client.GetUser(ctx, h.accountService, req.Email)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get the user from account service: %v", err)
 	}
