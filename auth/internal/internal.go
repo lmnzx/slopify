@@ -7,15 +7,17 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 )
 
 const (
-	AccessTokenExpiry  = time.Minute * 15
-	RefreshTokenExpiry = time.Hour * 24 * 7
-	AccessTokenType    = "access"
-	RefreshTokenType   = "refresh"
+	AccessTokenExpiry          = time.Minute * 15
+	RefreshTokenExpiry         = time.Hour * 24 * 7
+	RefreshTokenReuseThreshold = time.Hour * 24
+	AccessTokenType            = "access"
+	RefreshTokenType           = "refresh"
 )
 
 type AuthConfig struct {
@@ -35,9 +37,9 @@ type TokenPair struct {
 	RefreshToken string
 }
 
-type authService struct {
+type AuthService struct {
 	kv      valkey.Client
-	l       *zerolog.Logger
+	log     zerolog.Logger
 	authCfg AuthConfig
 }
 
@@ -45,67 +47,127 @@ var (
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrInvalidTokenClaims = errors.New("invalid token claims")
 	ErrTokenExpired       = errors.New("token expired")
+	ErrTokenNotFound      = errors.New("token not found in storage")
+	ErrTokenMismatch      = errors.New("token does not match stored token")
 )
 
-func NewAuthService(kv valkey.Client, l *zerolog.Logger) *authService {
-	return &authService{
-		kv: kv,
-		l:  l,
+func NewAuthService(kv valkey.Client) *AuthService {
+	return &AuthService{
+		kv:  kv,
+		log: middleware.GetLogger(),
+		authCfg: AuthConfig{
+			AccessTokenSecret:  "test",
+			RefreshTokenSecret: "test",
+		},
 	}
 }
 
-func (s *authService) ValidateRefreshToken(ctx context.Context, token string) (*TokenPair, error) {
+func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*TokenPair, error) {
 	refreshToken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
 		return []byte(s.authCfg.AccessTokenSecret), nil
 	})
 	if err != nil {
-		s.l.Error().Err(err).Msg("invalid token")
+		s.log.Error().Err(err).Msg("invalid token")
 		return nil, ErrInvalidToken
 	}
 
 	claims, ok := refreshToken.Claims.(*Claims)
-	if !ok || !refreshToken.Valid || claims.Type != AccessTokenType {
-		s.l.Error().Err(err).Msg("invalid token claims")
+	if !ok || !refreshToken.Valid {
+		s.log.Error().Msg("invalid token claims format")
+		return nil, ErrInvalidTokenClaims
+	}
+
+	if claims.Type != RefreshTokenType {
+		s.log.Error().Str("type", claims.Type).Msg("invalid token type")
 		return nil, ErrInvalidTokenClaims
 	}
 
 	storedToken, err := s.kv.Do(ctx, s.kv.B().Get().Key(claims.UserID).Build()).ToString()
-	if err != nil || storedToken != token {
-		return nil, ErrTokenExpired
+	if err != nil {
+		s.log.Error().Err(err).Str("userId", claims.UserID).Msg("failed to get stored token")
+		return nil, ErrTokenNotFound
 	}
 
-	tokenPair, err := s.GenerateTokenPair(ctx, claims.UserID, claims.Email)
+	if storedToken != token {
+		s.log.Error().Str("userId", claims.UserID).Msg("token doesn't match stored token")
+		return nil, ErrTokenMismatch
+	}
+
+	accessTokenString, err := s.generateAccessToken(claims.UserID, claims.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	return tokenPair, nil
+	var refreshTokenString string
+	timeUntilExpiry := time.Until(claims.ExpiresAt.Time)
+
+	if timeUntilExpiry < RefreshTokenReuseThreshold {
+		s.log.Info().Str("userId", claims.UserID).Dur("timeUntilExpiry", timeUntilExpiry).Msg("refresh token close to expiry, generating new one")
+
+		newRefreshToken, err := s.generateRefreshToken(ctx, claims.UserID, claims.Email)
+		if err != nil {
+			return nil, err
+		}
+		refreshTokenString = newRefreshToken
+	} else {
+		s.log.Info().Str("userId", claims.UserID).Dur("timeUntilExpiry", timeUntilExpiry).Msg("reusing existing refresh token")
+		refreshTokenString = storedToken
+	}
+
+	return &TokenPair{
+		AccessToken:  accessTokenString,
+		RefreshToken: refreshTokenString,
+	}, nil
 }
 
-func (s *authService) ValidateAccessToken(token string) (string, error) {
+func (s *AuthService) ValidateAccessToken(token string) (string, error) {
 	accessToken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
 		return []byte(s.authCfg.AccessTokenSecret), nil
 	})
 	if err != nil {
-		s.l.Error().Err(err).Msg("invalid token")
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return "", ErrTokenExpired
+		}
+		s.log.Error().Err(err).Msg("invalid access token")
 		return "", ErrInvalidToken
 	}
 
 	claims, ok := accessToken.Claims.(*Claims)
 	if !ok || !accessToken.Valid || claims.Type != AccessTokenType {
-		s.l.Error().Err(err).Msg("invalid token claims")
+		s.log.Error().Err(err).Msg("invalid token claims")
 		return "", ErrInvalidTokenClaims
-	}
-
-	if time.Now().After(claims.ExpiresAt.Time) {
-		s.l.Error().Err(err).Msg("token expire")
-		return "", ErrTokenExpired
 	}
 
 	return claims.UserID, nil
 }
 
-func (s *authService) GenerateTokenPair(ctx context.Context, userID, email string) (*TokenPair, error) {
+func (s *AuthService) GenerateTokenPair(ctx context.Context, userID, email string) (*TokenPair, error) {
+	accessTokenString, err := s.generateAccessToken(userID, email)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshTokenString, err := s.generateRefreshToken(ctx, userID, email)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TokenPair{
+		AccessToken:  accessTokenString,
+		RefreshToken: refreshTokenString,
+	}, nil
+}
+
+func (s *AuthService) RevokeTokens(ctx context.Context, userID string) error {
+	result := s.kv.Do(ctx, s.kv.B().Del().Key(userID).Build())
+	if result.Error() != nil {
+		s.log.Error().Err(result.Error()).Str("userId", userID).Msg("failed to revoke tokens")
+		return result.Error()
+	}
+	return nil
+}
+
+func (s *AuthService) generateAccessToken(userID, email string) (string, error) {
 	accessTokenClaims := Claims{
 		UserID: userID,
 		Email:  email,
@@ -119,14 +181,17 @@ func (s *authService) GenerateTokenPair(ctx context.Context, userID, email strin
 		},
 	}
 
-	// TODO: RS256
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessTokenClaims)
 	accessTokenString, err := accessToken.SignedString([]byte(s.authCfg.AccessTokenSecret))
 	if err != nil {
-		s.l.Error().Err(err).Msg("failed to create access token")
-		return nil, err
+		s.log.Error().Err(err).Msg("failed to create access token")
+		return "", err
 	}
 
+	return accessTokenString, nil
+}
+
+func (s *AuthService) generateRefreshToken(ctx context.Context, userID, email string) (string, error) {
 	refreshTokenClaims := Claims{
 		UserID: userID,
 		Email:  email,
@@ -143,15 +208,22 @@ func (s *authService) GenerateTokenPair(ctx context.Context, userID, email strin
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshTokenClaims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(s.authCfg.RefreshTokenSecret))
 	if err != nil {
-		s.l.Error().Err(err).Msg("failed to create refresh token")
-		return nil, err
+		s.log.Error().Err(err).Msg("failed to create refresh token")
+		return "", err
 	}
 
-	s.kv.DoMulti(ctx, s.kv.B().Set().Key(userID).Value(refreshTokenString).Build(),
+	err = s.storeRefreshToken(ctx, userID, refreshTokenString)
+	if err != nil {
+		return "", err
+	}
+
+	return refreshTokenString, nil
+}
+
+// TODO: Error Handling
+func (s *AuthService) storeRefreshToken(ctx context.Context, userID, token string) error {
+	s.kv.DoMulti(ctx, s.kv.B().Set().Key(userID).Value(token).Build(),
 		s.kv.B().Expire().Key(userID).Seconds(int64(RefreshTokenExpiry.Seconds())).Build())
 
-	return &TokenPair{
-		AccessToken:  accessTokenString,
-		RefreshToken: refreshTokenString,
-	}, nil
+	return nil
 }

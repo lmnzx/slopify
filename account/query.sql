@@ -8,8 +8,8 @@ RETURNING *;
 
 -- name: UpdateUser :one
 UPDATE users
-SET email = $1, address = $2
-WHERE email = $1 or id = $2
+SET name = $1, address = $2
+WHERE id = $3
 RETURNING *;
 
 -- name: GetUserByEmail :one
@@ -19,7 +19,3 @@ WHERE email = $1;
 -- name: GetUserById :one
 SELECT * FROM users
 WHERE id = $1;
-
--- name: DeleteUser :exec
-DELETE FROM users
-WHERE email = $1 or id = $2;

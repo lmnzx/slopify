@@ -1,4 +1,4 @@
-package logger
+package middleware
 
 import (
 	"context"
@@ -23,7 +23,7 @@ var log zerolog.Logger
 func RequestLogger(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
-		l := Get()
+		l := GetLogger()
 		defer func() {
 			l.Info().Str("method", string(ctx.Method())).Str("path", string(ctx.Path())).Dur("elasped_ms", time.Since(start)).Msg("rest request")
 		}()
@@ -34,7 +34,7 @@ func RequestLogger(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
-		l := Get()
+		l := GetLogger()
 
 		clientIP := "unknown"
 		if p, ok := peer.FromContext(ctx); ok {
@@ -63,7 +63,7 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
-func Get() zerolog.Logger {
+func GetLogger() zerolog.Logger {
 	once.Do(func() {
 		zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 		zerolog.TimeFieldFormat = time.RFC3339Nano

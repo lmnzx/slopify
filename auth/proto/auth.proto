@@ -4,29 +4,42 @@ package auth;
 
 option go_package = "auth/proto";
 
-import "google/protobuf/timestamp.proto";
-
 service AuthService {
-    rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse) {}
+    rpc ValidateSession(TokenPair) returns (ValidateSessionResponse) {}
     rpc GenerateToken(GenerateTokenRequest) returns (TokenPair) {}
-}
-
-message ValidateTokenRequest {
-    string access_token = 1;
-    string refresh_token = 2;
-}
-
-message GenerateTokenRequest {
-    string refresh_token = 1;
-}
-
-message ValidateTokenResponse {
-    bool valid = 1;
-    string user_id = 2;
+    rpc RefreshToken(RefreshTokenRequest) returns (TokenPair) {}
+    rpc RevokeTokens(RevokeTokensRequest) returns (RevokeTokensResponse);
 }
 
 message TokenPair {
     string access_token = 1;
     string refresh_token = 2;
-    google.protobuf.Timestamp expires_at = 3;
+}
+
+message GenerateTokenRequest {
+    string user_id= 1;
+    string email= 2;
+}
+
+message RefreshTokenRequest {
+    string refresh_token = 1;
+}
+
+message RevokeTokensRequest {
+  string user_id = 1;
+}
+
+message ValidateSessionResponse {
+  enum Status {
+        VALID = 0;
+        EXPIRED = 1;
+        INVALID = 2;
+    }
+    Status status = 1;
+    optional string user_id = 2;
+    optional TokenPair token_pair= 3;
+}
+
+message RevokeTokensResponse {
+  bool success = 1;
 }
