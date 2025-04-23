@@ -3,14 +3,20 @@ package handler
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/account/repository"
+	"github.com/lmnzx/slopify/pkg/middleware"
+
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -23,6 +29,50 @@ type GrpcHandler struct {
 func NewGrpcHandler(queries *repository.Queries) *GrpcHandler {
 	return &GrpcHandler{
 		queries: queries,
+	}
+}
+
+func StartGrpcServer(ctx context.Context, queries *repository.Queries, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	log := middleware.GetLogger()
+
+	lis, err := net.Listen("tcp", ":3000")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to setup tcp listener")
+		return
+	}
+
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
+	)
+
+	h := NewGrpcHandler(queries)
+	proto.RegisterAccountServiceServer(s, h)
+	reflection.Register(s)
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		log.Info().Msg("grpc server stared")
+		if err := s.Serve(lis); err != nil {
+			if err != grpc.ErrServerStopped {
+				serveErrCh <- err
+			} else {
+				close(serveErrCh)
+			}
+		} else {
+			close(serveErrCh)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		s.GracefulStop()
+		if err := <-serveErrCh; err != nil {
+			log.Error().Err(err).Msg("error during server run after shutdown initiated")
+		}
+	case err := <-serveErrCh:
+		log.Error().Err(err).Msg("grpc server failed")
 	}
 }
 

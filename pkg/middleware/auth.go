@@ -5,7 +5,6 @@ import (
 
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/cookie"
-	"github.com/lmnzx/slopify/pkg/response"
 	"github.com/valyala/fasthttp"
 )
 
@@ -17,7 +16,6 @@ func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.Reque
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			log := GetLogger()
-			res := response.NewResponseSender()
 
 			log.Info().Msg("auth middleware executing")
 
@@ -26,7 +24,8 @@ func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.Reque
 
 			if accessToken == "" && refreshToken == "" {
 				log.Warn().Msg("authMiddleware: access or refresh token missing from cookies")
-				res.SendError(ctx, fasthttp.StatusUnauthorized, "Missing authentication tokens")
+				ctx.SetUserValue(UserIDCtxKey, "")
+				next(ctx)
 				return
 			}
 
@@ -34,9 +33,10 @@ func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.Reque
 				AccessToken:  accessToken,
 				RefreshToken: refreshToken,
 			})
-			if err != nil || r.Status != auth.ValidateSessionResponse_VALID {
+			if err != nil || r.Status != auth.ValidateSessionResponse_VALID || r == nil {
 				log.Warn().Msg("authMiddleware: session validation failed")
-				res.SendError(ctx, fasthttp.StatusUnauthorized, "Invalid or expired session")
+				ctx.SetUserValue(UserIDCtxKey, "")
+				next(ctx)
 				return
 			}
 
