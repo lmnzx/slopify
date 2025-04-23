@@ -6,6 +6,7 @@ require (
 	github.com/fasthttp/router v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
+	github.com/meilisearch/meilisearch-go v0.31.0
 	github.com/rs/zerolog v1.34.0
 	github.com/valyala/fasthttp v1.60.0
 	golang.org/x/crypto v0.36.0
@@ -13,7 +14,12 @@ require (
 	google.golang.org/protobuf v1.36.6
 )
 
-require github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
+require (
+	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
+	github.com/josharian/intern v1.0.0 // indirect
+	github.com/mailru/easyjson v0.9.0 // indirect
+	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
+)
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect

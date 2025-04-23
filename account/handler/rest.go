@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"sync"
 
+	"github.com/fasthttp/router"
 	"github.com/google/uuid"
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
@@ -13,19 +16,68 @@ import (
 )
 
 type RestHandler struct {
-	queries     *repository.Queries
-	authService auth.AuthServiceClient
-	res         *response.ResponseSender
-	log         zerolog.Logger
+	queries *repository.Queries
+	res     *response.ResponseSender
+	log     zerolog.Logger
 }
 
-func NewRestHandler(queries *repository.Queries, authService auth.AuthServiceClient) *RestHandler {
+func NewRestHandler(queries *repository.Queries) *RestHandler {
 	return &RestHandler{
-		queries:     queries,
-		authService: authService,
-		log:         middleware.GetLogger(),
-		res:         response.NewResponseSender(),
+		queries: queries,
+		log:     middleware.GetLogger(),
+		res:     response.NewResponseSender(),
 	}
+}
+
+func StartRestServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	r := router.New()
+
+	handler := NewRestHandler(queries)
+	authMw := middleware.AuthMiddleware(auth)
+
+	r.GET("/health", handler.healthCheck)
+	r.POST("/update", authMw(handler.update))
+
+	server := &fasthttp.Server{
+		Handler: middleware.RequestLogger(r.Handler),
+	}
+
+	log := middleware.GetLogger()
+	serveErrCh := make(chan error, 1)
+	go func() {
+		restAddr := ":9000"
+		log.Info().Str("address", restAddr).Msg("rest server started")
+		if err := server.ListenAndServe(restAddr); err != nil {
+			select {
+			case <-ctx.Done():
+				log.Println("fasthttp server stopped gracefully")
+			default:
+				serveErrCh <- err
+			}
+			close(serveErrCh)
+		} else {
+			close(serveErrCh)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		if err := server.Shutdown(); err != nil {
+			log.Error().Err(err).Msg("error during fasthttp server shutdown")
+		}
+		<-serveErrCh
+
+	case err := <-serveErrCh:
+		if err != nil {
+			log.Error().Err(err).Msg("fasthttp server failed unexpectedly")
+		}
+	}
+}
+
+func (h *RestHandler) healthCheck(ctx *fasthttp.RequestCtx) {
+	h.res.SendSuccess(ctx, fasthttp.StatusOK, "all ok")
 }
 
 type UpdateRequest struct {
@@ -33,22 +85,29 @@ type UpdateRequest struct {
 	Address string `json:"address"`
 }
 
-func (h *RestHandler) HealthCheck(ctx *fasthttp.RequestCtx) {
-	h.res.SendSuccess(ctx, fasthttp.StatusOK, "all ok")
-}
-
-func (h *RestHandler) Update(ctx *fasthttp.RequestCtx) {
+func (h *RestHandler) update(ctx *fasthttp.RequestCtx) {
 	user_id := middleware.GetUserIDFromCtx(ctx)
+
+	if user_id == "" {
+		h.log.Info().Msg("attempt to update profile while not logged in")
+		h.res.SendError(ctx, fasthttp.StatusUnauthorized, "user is not logged in")
+		return
+	}
 
 	body := ctx.Request.Body()
 	if len(body) == 0 {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "empty request body")
 		return
 	}
 
 	var parsedBody UpdateRequest
 	if err := json.Unmarshal(body, &parsedBody); err != nil {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "invalid request format, needs name and address to update")
+		return
+	}
+
+	if parsedBody.Name == "" && parsedBody.Address == "" {
+		h.res.SendError(ctx, fasthttp.StatusBadRequest, "no fields to update")
 		return
 	}
 
@@ -68,7 +127,7 @@ func (h *RestHandler) Update(ctx *fasthttp.RequestCtx) {
 
 	h.res.SendSuccess(ctx, fasthttp.StatusOK, map[string]string{
 		"user_id": updatedUser.ID.String(),
-		"name":    updatedUser.Email,
+		"name":    updatedUser.Name,
 		"address": updatedUser.Address,
 	})
 }
