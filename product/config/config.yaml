@@ -1,0 +1,13 @@
+name: "product"
+restserveraddress: ":3002"
+authserviceaddress: ":4000"
+postgres:
+    user: "postgres" 
+    password: "postgres"
+    host: "localhost"
+    port: "5432"
+    dbname: "slopify"
+    ssl: false
+meilisearch:
+    url: "http://localhost:7700"
+    key: "masterkey"

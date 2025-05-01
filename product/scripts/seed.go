@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/lmnzx/slopify/product/repository"
 	"github.com/meilisearch/meilisearch-go"
 )
@@ -29,7 +28,7 @@ type Response struct {
 	Limit int `json:"limit"`
 }
 
-func Seed() {
+func Seed(queries *repository.Queries, index meilisearch.IndexManager) {
 	resp, err := http.Get("https://dummyjson.com/products?limit=100&select=title,price,description,category,discountPercentage,stock")
 	if err != nil {
 		panic(err)
@@ -47,22 +46,8 @@ func Seed() {
 		panic(err)
 	}
 
-	client := meilisearch.New("http://localhost:7700", meilisearch.WithAPIKey("masterkey"))
-	defer client.Close()
-
-	index := client.Index("products")
-
-	conn, err := pgx.Connect(context.Background(), "postgresql://postgres:postgres@localhost:5432/slopify?sslmode=disable")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close(context.Background())
-
-	q := repository.New(conn)
-
 	for i, product := range response.Products {
-		err := q.CreateProduct(context.Background(), repository.CreateProductParams{
+		err := queries.CreateProduct(context.Background(), repository.CreateProductParams{
 			ID:              int32(product.ID),
 			Title:           product.Title,
 			Description:     product.Description,

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/lmnzx/slopify/account/config"
 	"github.com/lmnzx/slopify/account/handler"
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
@@ -18,9 +19,10 @@ import (
 )
 
 func main() {
+	config := config.GetConfig()
 	log := middleware.GetLogger()
 
-	dbpool, err := pgxpool.New(context.Background(), "postgresql://postgres:postgres@localhost:5432/slopify?sslmode=disable")
+	dbpool, err := pgxpool.New(context.Background(), config.GetDBConnectionString())
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to connect to database")
 	}
@@ -35,8 +37,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// auth service
-	conn, err := grpc.NewClient(":8000", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(config.AuthServiceAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect")
 	}
@@ -47,10 +48,10 @@ func main() {
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go handler.StartGrpcServer(ctx, queries, &wg)
+	go handler.StartGrpcServer(ctx, config.GrpcServerAddress, queries, &wg)
 
 	wg.Add(1)
-	go handler.StartRestServer(ctx, queries, c, &wg)
+	go handler.StartRestServer(ctx, config.RestServerAddress, queries, c, &wg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)

@@ -32,12 +32,12 @@ func NewGrpcHandler(queries *repository.Queries) *GrpcHandler {
 	}
 }
 
-func StartGrpcServer(ctx context.Context, queries *repository.Queries, wg *sync.WaitGroup) {
+func StartGrpcServer(ctx context.Context, port string, queries *repository.Queries, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	log := middleware.GetLogger()
 
-	lis, err := net.Listen("tcp", ":3000")
+	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to setup tcp listener")
 		return
@@ -53,7 +53,7 @@ func StartGrpcServer(ctx context.Context, queries *repository.Queries, wg *sync.
 
 	serveErrCh := make(chan error, 1)
 	go func() {
-		log.Info().Msg("grpc server stared")
+		log.Info().Str("port", port).Msg("grpc server stared")
 		if err := s.Serve(lis); err != nil {
 			if err != grpc.ErrServerStopped {
 				serveErrCh <- err
