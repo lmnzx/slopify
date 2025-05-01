@@ -29,7 +29,7 @@ func NewRestHandler(queries *repository.Queries) *RestHandler {
 	}
 }
 
-func StartRestServer(ctx context.Context, queries *repository.Queries, auth auth.AuthServiceClient, wg *sync.WaitGroup) {
+func StartRestServer(ctx context.Context, port string, queries *repository.Queries, auth auth.AuthServiceClient, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := router.New()
@@ -47,9 +47,8 @@ func StartRestServer(ctx context.Context, queries *repository.Queries, auth auth
 	log := middleware.GetLogger()
 	serveErrCh := make(chan error, 1)
 	go func() {
-		restAddr := ":9000"
-		log.Info().Str("address", restAddr).Msg("rest server started")
-		if err := server.ListenAndServe(restAddr); err != nil {
+		log.Info().Str("port", port).Msg("rest server started")
+		if err := server.ListenAndServe(port); err != nil {
 			select {
 			case <-ctx.Done():
 				log.Println("fasthttp server stopped gracefully")

@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"net"
+	"sync"
 
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/client"
@@ -10,7 +12,9 @@ import (
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -26,6 +30,50 @@ func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceC
 		authService:    *internal.NewAuthService(client),
 		accountService: accountService,
 		log:            middleware.GetLogger(),
+	}
+}
+
+func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	log := middleware.GetLogger()
+
+	lis, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to setup tcp listener")
+		return
+	}
+
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
+	)
+
+	h := NewGrpcHandler(valkeyClient, accountService)
+	proto.RegisterAuthServiceServer(s, h)
+	reflection.Register(s)
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		log.Info().Str("port", port).Msg("grpc server stared")
+		if err := s.Serve(lis); err != nil {
+			if err != grpc.ErrServerStopped {
+				serveErrCh <- err
+			} else {
+				close(serveErrCh)
+			}
+		} else {
+			close(serveErrCh)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		s.GracefulStop()
+		if err := <-serveErrCh; err != nil {
+			log.Error().Err(err).Msg("error during server run after shutdown initiated")
+		}
+	case err := <-serveErrCh:
+		log.Error().Err(err).Msg("grpc server failed")
 	}
 }
 

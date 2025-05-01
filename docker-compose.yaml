@@ -1,0 +1,183 @@
+name: slopify
+
+services:
+  traefik:
+    image: traefik:v3.3.6
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedByDefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "dev.orbstack.domains=slopify.local"
+
+  postgres:
+    image: postgres:17.4-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: slopify
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8.1.1-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.14.0
+    environment:
+      MEILI_MASTER_KEY: masterkey
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch_data:/data.ms
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  account-migrations:
+    image: migrate/migrate:4
+    volumes:
+      - ./account/migrations:/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["-path", "/migrations/", "-database", "postgres://postgres:postgres@postgres:5432/slopify?sslmode=disable&x-migrations-table=account-schema", "up"]
+
+  product-migrations:
+    image: migrate/migrate:4
+    volumes:
+      - ./product/migrations:/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["-path", "/migrations/", "-database", "postgres://postgres:postgres@postgres:5432/slopify?sslmode=disable&x-migrations-table=product-schema", "up"]    
+
+  account-service:
+    build:
+      context: .
+      dockerfile: account/Dockerfile
+    environment:
+      ENV_NAME: account
+      ENV_RESTSERVERADDRESS: :3000
+      ENV_GRPCSERVERADDRESS: :4000
+      ENV_AUTHSERVICEADDRESS: auth-service:6000
+      ENV_POSTGRES_USER: postgres
+      ENV_POSTGRES_PASSWORD: postgres
+      ENV_POSTGRES_HOST: postgres
+      ENV_POSTGRES_PORT: 5432
+      ENV_POSTGRES_DBNAME: slopify
+      ENV_POSTGRES_SSL: "false"
+    ports:
+      - "3000:3000"
+      - "4000:4000"
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
+      product-migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.account.rule=PathPrefix(`/v1/api/account`)"
+      - "traefik.http.routers.account.entrypoints=web"
+      - "traefik.http.services.account.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.account-stripprefix.stripprefix.prefixes=/v1/api/account"
+      - "traefik.http.routers.account.middlewares=account-stripprefix"
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth/Dockerfile
+    environment:
+      ENV_NAME: auth
+      ENV_RESTSERVERADDRESS: :3001
+      ENV_GRPCSERVERADDRESS: :6000
+      ENV_ACCOUNTSERVICEADDRESS: account-service:4000
+      ENV_VALKEY_USER: default
+      ENV_VALKEY_PASSWORD: default
+      ENV_VALKEY_HOST: valkey
+      ENV_VALKEY_PORT: 6379
+      ENV_VALKEY_DBNUMBER: 1
+    ports:
+      - "3001:3001"
+      - "6000:6000"
+    depends_on:
+      valkey:
+        condition: service_healthy
+      account-service:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=PathPrefix(`/v1/api/auth`)"
+      - "traefik.http.routers.auth.entrypoints=web"
+      - "traefik.http.services.auth.loadbalancer.server.port=3001"
+      - "traefik.http.middlewares.auth-stripprefix.stripprefix.prefixes=/v1/api/auth"
+      - "traefik.http.routers.auth.middlewares=auth-stripprefix"
+
+  product-service:
+    build:
+      context: .
+      dockerfile: product/Dockerfile
+    environment:
+      ENV_NAME: product
+      ENV_RESTSERVERADDRESS: :3002
+      ENV_AUTHSERVICEADDRESS: auth-service:6000
+      ENV_POSTGRES_USER: postgres
+      ENV_POSTGRES_PASSWORD: postgres
+      ENV_POSTGRES_HOST: postgres
+      ENV_POSTGRES_PORT: 5432
+      ENV_POSTGRES_DBNAME: slopify
+      ENV_POSTGRES_SSL: "false"
+      ENV_MEILISEARCH_URL: http://meilisearch:7700
+      ENV_MEILISEARCH_KEY: masterkey
+    ports:
+      - "3002:3002"
+    depends_on:
+      account-migrations:
+        condition: service_completed_successfully
+      product-migrations:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.product.rule=PathPrefix(`/v1/api/product`)"
+      - "traefik.http.routers.product.entrypoints=web"
+      - "traefik.http.services.product.loadbalancer.server.port=3002"
+      - "traefik.http.middlewares.product-stripprefix.stripprefix.prefixes=/v1/api/product"
+      - "traefik.http.routers.product.middlewares=product-stripprefix"
+
+volumes:
+  postgres_data:
+  valkey_data:
+  meilisearch_data:

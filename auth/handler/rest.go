@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"sync"
 
+	"github.com/fasthttp/router"
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
@@ -27,6 +30,55 @@ func NewRestHandler(valkeyClient valkey.Client, accountService account.AccountSe
 		accountService: accountService,
 		res:            response.NewResponseSender(),
 		log:            middleware.GetLogger(),
+	}
+}
+
+func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	log := middleware.GetLogger()
+
+	handler := NewRestHandler(valkeyClient, accountService)
+	r := router.New()
+
+	r.GET("/health", handler.HealthCheck)
+	r.POST("/signup", handler.SignUp)
+	r.POST("/login", handler.LogIn)
+	r.GET("/validate", handler.ValidateSession)
+	r.POST("/refresh", handler.RefreshTokens)
+	r.GET("/logout", handler.LogOut)
+
+	server := &fasthttp.Server{
+		Handler: middleware.RequestLogger(r.Handler),
+	}
+
+	serveErrCh := make(chan error, 1)
+	go func() {
+		log.Info().Str("port", port).Msg("rest server started")
+		if err := server.ListenAndServe(port); err != nil {
+			select {
+			case <-ctx.Done():
+				log.Println("fasthttp server stopped gracefully")
+			default:
+				serveErrCh <- err
+			}
+			close(serveErrCh)
+		} else {
+			close(serveErrCh)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		if err := server.Shutdown(); err != nil {
+			log.Error().Err(err).Msg("error during fasthttp server shutdown")
+		}
+		<-serveErrCh
+
+	case err := <-serveErrCh:
+		if err != nil {
+			log.Error().Err(err).Msg("fasthttp server failed unexpectedly")
+		}
 	}
 }
 
