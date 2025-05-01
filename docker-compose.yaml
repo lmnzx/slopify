@@ -1,4 +1,22 @@
+name: slopify
+
 services:
+  traefik:
+    image: traefik:v3.3.6
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedByDefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "dev.orbstack.domains=slopify.local"
+
   postgres:
     image: postgres:17.4-alpine
     environment:
@@ -84,6 +102,13 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.account.rule=PathPrefix(`/v1/api/account`)"
+      - "traefik.http.routers.account.entrypoints=web"
+      - "traefik.http.services.account.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.account-stripprefix.stripprefix.prefixes=/v1/api/account"
+      - "traefik.http.routers.account.middlewares=account-stripprefix"
 
   auth-service:
     build:
@@ -107,6 +132,13 @@ services:
         condition: service_healthy
       account-service:
         condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=PathPrefix(`/v1/api/auth`)"
+      - "traefik.http.routers.auth.entrypoints=web"
+      - "traefik.http.services.auth.loadbalancer.server.port=3001"
+      - "traefik.http.middlewares.auth-stripprefix.stripprefix.prefixes=/v1/api/auth"
+      - "traefik.http.routers.auth.middlewares=auth-stripprefix"
 
   product-service:
     build:
@@ -137,6 +169,13 @@ services:
         condition: service_healthy
       auth-service:
         condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.product.rule=PathPrefix(`/v1/api/product`)"
+      - "traefik.http.routers.product.entrypoints=web"
+      - "traefik.http.services.product.loadbalancer.server.port=3002"
+      - "traefik.http.middlewares.product-stripprefix.stripprefix.prefixes=/v1/api/product"
+      - "traefik.http.routers.product.middlewares=product-stripprefix"
 
 volumes:
   postgres_data:
