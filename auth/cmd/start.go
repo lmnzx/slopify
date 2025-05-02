@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -53,8 +52,6 @@ func main() {
 		AccessTokenSecret:  config.Secrets.AccessTokenSecret,
 		RefreshTokenSecret: config.Secrets.RefreshTokenSecret,
 	}
-
-	fmt.Println(secrets)
 
 	wg.Add(1)
 	go handler.StartGrpcServer(ctx, config.GrpcServerAddress, valkeyClient, c, secrets, &wg)
