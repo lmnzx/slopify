@@ -25,15 +25,15 @@ type GrpcHandler struct {
 	log            zerolog.Logger
 }
 
-func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceClient) *GrpcHandler {
+func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets) *GrpcHandler {
 	return &GrpcHandler{
-		authService:    *internal.NewAuthService(client),
+		authService:    *internal.NewAuthService(client, secrets),
 		accountService: accountService,
 		log:            middleware.GetLogger(),
 	}
 }
 
-func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, wg *sync.WaitGroup) {
+func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	log := middleware.GetLogger()
@@ -48,7 +48,7 @@ func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Clien
 		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
 	)
 
-	h := NewGrpcHandler(valkeyClient, accountService)
+	h := NewGrpcHandler(valkeyClient, accountService, secrets)
 	proto.RegisterAuthServiceServer(s, h)
 	reflection.Register(s)
 

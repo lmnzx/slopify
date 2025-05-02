@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/config"
 	"github.com/lmnzx/slopify/auth/handler"
+	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/pkg/middleware"
 
 	"github.com/valkey-io/valkey-go"
@@ -47,11 +49,18 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go handler.StartGrpcServer(ctx, config.GrpcServerAddress, valkeyClient, c, &wg)
+	secrets := internal.Secrets{
+		AccessTokenSecret:  config.Secrets.AccessTokenSecret,
+		RefreshTokenSecret: config.Secrets.RefreshTokenSecret,
+	}
+
+	fmt.Println(secrets)
 
 	wg.Add(1)
-	go handler.StartRestServer(ctx, config.RestServerAddress, valkeyClient, c, &wg)
+	go handler.StartGrpcServer(ctx, config.GrpcServerAddress, valkeyClient, c, secrets, &wg)
+
+	wg.Add(1)
+	go handler.StartRestServer(ctx, config.RestServerAddress, valkeyClient, c, secrets, &wg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)

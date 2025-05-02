@@ -20,6 +20,10 @@ type AuthServiceConfig struct {
 		Port     string `mapstructure:"port"`
 		DBNumber string `mapstructure:"dbnumber"`
 	}
+	Secrets struct {
+		AccessTokenSecret  string `mapstructure:"accesstoken"`
+		RefreshTokenSecret string `mapstructure:"refreshtoken"`
+	}
 }
 
 func GetConfig() AuthServiceConfig {

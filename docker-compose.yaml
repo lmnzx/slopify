@@ -124,6 +124,8 @@ services:
       ENV_VALKEY_HOST: valkey
       ENV_VALKEY_PORT: 6379
       ENV_VALKEY_DBNUMBER: 1
+      ENV_SECRETS_ACCESSTOKEN: justforshow 
+      ENV_SECRETS_REFRESHTOKEN: nottherealone
     ports:
       - "3001:3001"
       - "6000:6000"
