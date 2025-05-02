@@ -20,7 +20,7 @@ const (
 	RefreshTokenType           = "refresh"
 )
 
-type AuthConfig struct {
+type Secrets struct {
 	AccessTokenSecret  string
 	RefreshTokenSecret string
 }
@@ -40,7 +40,7 @@ type TokenPair struct {
 type AuthService struct {
 	kv      valkey.Client
 	log     zerolog.Logger
-	authCfg AuthConfig
+	secrets Secrets
 }
 
 var (
@@ -51,20 +51,20 @@ var (
 	ErrTokenMismatch      = errors.New("token does not match stored token")
 )
 
-func NewAuthService(kv valkey.Client) *AuthService {
+func NewAuthService(kv valkey.Client, secrets Secrets) *AuthService {
 	return &AuthService{
 		kv:  kv,
 		log: middleware.GetLogger(),
-		authCfg: AuthConfig{
-			AccessTokenSecret:  "test",
-			RefreshTokenSecret: "test",
+		secrets: Secrets{
+			AccessTokenSecret:  secrets.AccessTokenSecret,
+			RefreshTokenSecret: secrets.RefreshTokenSecret,
 		},
 	}
 }
 
 func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*TokenPair, error) {
 	refreshToken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
-		return []byte(s.authCfg.AccessTokenSecret), nil
+		return []byte(s.secrets.AccessTokenSecret), nil
 	})
 	if err != nil {
 		s.log.Error().Err(err).Msg("invalid token")
@@ -122,7 +122,7 @@ func (s *AuthService) ValidateRefreshToken(ctx context.Context, token string) (*
 
 func (s *AuthService) ValidateAccessToken(token string) (string, error) {
 	accessToken, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (any, error) {
-		return []byte(s.authCfg.AccessTokenSecret), nil
+		return []byte(s.secrets.AccessTokenSecret), nil
 	})
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -182,7 +182,7 @@ func (s *AuthService) generateAccessToken(userID, email string) (string, error) 
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessTokenClaims)
-	accessTokenString, err := accessToken.SignedString([]byte(s.authCfg.AccessTokenSecret))
+	accessTokenString, err := accessToken.SignedString([]byte(s.secrets.AccessTokenSecret))
 	if err != nil {
 		s.log.Error().Err(err).Msg("failed to create access token")
 		return "", err
@@ -206,7 +206,7 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, userID, email st
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshTokenClaims)
-	refreshTokenString, err := refreshToken.SignedString([]byte(s.authCfg.RefreshTokenSecret))
+	refreshTokenString, err := refreshToken.SignedString([]byte(s.secrets.RefreshTokenSecret))
 	if err != nil {
 		s.log.Error().Err(err).Msg("failed to create refresh token")
 		return "", err

@@ -24,21 +24,21 @@ type RestHandler struct {
 	log            zerolog.Logger
 }
 
-func NewRestHandler(valkeyClient valkey.Client, accountService account.AccountServiceClient) *RestHandler {
+func NewRestHandler(valkeyClient valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets) *RestHandler {
 	return &RestHandler{
-		authService:    *internal.NewAuthService(valkeyClient),
+		authService:    *internal.NewAuthService(valkeyClient, secrets),
 		accountService: accountService,
 		res:            response.NewResponseSender(),
 		log:            middleware.GetLogger(),
 	}
 }
 
-func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, wg *sync.WaitGroup) {
+func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	log := middleware.GetLogger()
 
-	handler := NewRestHandler(valkeyClient, accountService)
+	handler := NewRestHandler(valkeyClient, accountService, secrets)
 	r := router.New()
 
 	r.GET("/health", handler.HealthCheck)
