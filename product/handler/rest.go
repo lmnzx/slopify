@@ -42,7 +42,7 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	r.GET("/get", authMw(handler.getProduct))
 
 	server := &fasthttp.Server{
-		Handler: middleware.RequestLogger(r.Handler),
+		Handler: middleware.RequestID(middleware.RequestLogger(r.Handler)),
 	}
 
 	log := middleware.GetLogger()

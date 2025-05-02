@@ -41,7 +41,7 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	r.POST("/update", authMw(handler.update))
 
 	server := &fasthttp.Server{
-		Handler: middleware.RequestLogger(r.Handler),
+		Handler: middleware.RequestID(middleware.RequestLogger(r.Handler)),
 	}
 
 	log := middleware.GetLogger()

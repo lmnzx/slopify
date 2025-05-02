@@ -49,7 +49,7 @@ func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Clien
 	r.GET("/logout", handler.LogOut)
 
 	server := &fasthttp.Server{
-		Handler: middleware.RequestLogger(r.Handler),
+		Handler: middleware.RequestID(middleware.RequestLogger(r.Handler)),
 	}
 
 	serveErrCh := make(chan error, 1)
