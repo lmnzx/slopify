@@ -10,6 +10,8 @@ import (
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/tracing"
+
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"google.golang.org/grpc"
@@ -45,7 +47,10 @@ func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Clien
 	}
 
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
+		grpc.ChainUnaryInterceptor(
+			middleware.UnaryServerLoggingInterceptor(),
+			tracing.UnaryServerTracingInterceptor("auth"),
+		),
 	)
 
 	h := NewGrpcHandler(valkeyClient, accountService, secrets)

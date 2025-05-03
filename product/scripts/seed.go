@@ -9,7 +9,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/product/repository"
+
 	"github.com/meilisearch/meilisearch-go"
 )
 
@@ -29,6 +31,21 @@ type Response struct {
 }
 
 func Seed(queries *repository.Queries, index meilisearch.IndexManager) {
+	log := middleware.GetLogger()
+
+	ctx, cancle := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancle()
+
+	isDataPresent, err := queries.ListAllProducts(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	if len(isDataPresent) > 0 {
+		log.Info().Msg("some data is present in the database so skipping seeding...")
+		return
+	}
+
 	resp, err := http.Get("https://dummyjson.com/products?limit=100&select=title,price,description,category,discountPercentage,stock")
 	if err != nil {
 		panic(err)
@@ -46,7 +63,7 @@ func Seed(queries *repository.Queries, index meilisearch.IndexManager) {
 		panic(err)
 	}
 
-	for i, product := range response.Products {
+	for _, product := range response.Products {
 		err := queries.CreateProduct(context.Background(), repository.CreateProductParams{
 			ID:              int32(product.ID),
 			Title:           product.Title,
@@ -65,7 +82,7 @@ func Seed(queries *repository.Queries, index meilisearch.IndexManager) {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		time.Sleep(time.Second * 1)
-		fmt.Printf("seeding datatbase, entry no: %v\n", i)
+		time.Sleep(time.Millisecond * 100)
 	}
+	log.Info().Msg("database is seeded and ready to use")
 }

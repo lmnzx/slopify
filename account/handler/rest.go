@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
+	"github.com/lmnzx/slopify/pkg/tracing"
+
+	"github.com/fasthttp/router"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 )
@@ -29,19 +31,19 @@ func NewRestHandler(queries *repository.Queries) *RestHandler {
 	}
 }
 
-func StartRestServer(ctx context.Context, port string, queries *repository.Queries, auth auth.AuthServiceClient, wg *sync.WaitGroup) {
+func StartRestServer(ctx context.Context, port string, queries *repository.Queries, authClient auth.AuthServiceClient, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := router.New()
 
 	handler := NewRestHandler(queries)
-	authMw := middleware.AuthMiddleware(auth)
+	authMw := middleware.AuthMiddleware(authClient)
 
 	r.GET("/health", handler.healthCheck)
 	r.POST("/update", authMw(handler.update))
 
 	server := &fasthttp.Server{
-		Handler: middleware.RequestLogger(r.Handler),
+		Handler: tracing.RequestTracingMiddleware(middleware.RequestLoggerMiddleware(r.Handler), "account"),
 	}
 
 	log := middleware.GetLogger()

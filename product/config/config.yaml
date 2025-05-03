@@ -1,6 +1,7 @@
 name: "product"
+version: "0.0.1"
 restserveraddress: ":3002"
-authserviceaddress: ":4000"
+authserviceaddress: ":6000"
 postgres:
     user: "postgres" 
     password: "postgres"
@@ -11,3 +12,4 @@ postgres:
 meilisearch:
     url: "http://localhost:7700"
     key: "masterkey"
+otelcollectorurl: "0.0.0.0:4317"

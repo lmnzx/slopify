@@ -5,11 +5,14 @@ import (
 	"log"
 	"strings"
 
+	"github.com/lmnzx/slopify/pkg/middleware"
+
 	"github.com/spf13/viper"
 )
 
 type AuthServiceConfig struct {
 	Name                  string `mapstructure:"name"`
+	Version               string `mapstructure:"version"`
 	RestServerAddress     string `mapstructure:"restserveraddress"`
 	GrpcServerAddress     string `mapstructure:"grpcserveraddress"`
 	AccountServiceAddress string `mapstructure:"accountserviceaddress"`
@@ -24,6 +27,7 @@ type AuthServiceConfig struct {
 		AccessTokenSecret  string `mapstructure:"accesstoken"`
 		RefreshTokenSecret string `mapstructure:"refreshtoken"`
 	}
+	OtelCollectorURL string `mapstructure:"otelcollectorurl"`
 }
 
 func GetConfig() AuthServiceConfig {
@@ -45,6 +49,8 @@ func GetConfig() AuthServiceConfig {
 	if err != nil {
 		log.Fatalf("Unable to decode into struct, %v", err)
 	}
+
+	middleware.SetServiceName(config.Name)
 
 	return config
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/lmnzx/slopify/auth/handler"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/tracing"
 
 	"github.com/valkey-io/valkey-go"
 	"google.golang.org/grpc"
@@ -22,6 +23,15 @@ func main() {
 	config := config.GetConfig()
 	log := middleware.GetLogger()
 
+	cleanup, err := tracing.InitTracer(config.Name, config.Version, config.OtelCollectorURL, log)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize tracer")
+	}
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	client, err := valkey.ParseURL(config.GetDBConnectionString())
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to parse valkey url")
@@ -31,12 +41,9 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to connect to valkey database")
 	}
-	if err := valkeyClient.Do(context.Background(), valkeyClient.B().Ping().Build()).Error(); err != nil {
+	if err := valkeyClient.Do(ctx, valkeyClient.B().Ping().Build()).Error(); err != nil {
 		log.Fatal().Err(err).Msg("unable to ping to valkey database")
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	conn, err := grpc.NewClient(config.AccountServiceAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

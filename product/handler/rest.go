@@ -4,11 +4,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/fasthttp/router"
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
+	"github.com/lmnzx/slopify/pkg/tracing"
 	"github.com/lmnzx/slopify/product/repository"
+
+	"github.com/fasthttp/router"
 	"github.com/meilisearch/meilisearch-go"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
@@ -30,19 +32,19 @@ func NewRestHandler(queries *repository.Queries, index meilisearch.IndexManager)
 	}
 }
 
-func StartRestServer(ctx context.Context, port string, queries *repository.Queries, index meilisearch.IndexManager, auth auth.AuthServiceClient, wg *sync.WaitGroup) {
+func StartRestServer(ctx context.Context, port string, queries *repository.Queries, index meilisearch.IndexManager, authClient auth.AuthServiceClient, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r := router.New()
 
 	handler := NewRestHandler(queries, index)
-	authMw := middleware.AuthMiddleware(auth)
+	authMw := middleware.AuthMiddleware(authClient)
 
 	r.GET("/health", handler.healthCheck)
 	r.GET("/get", authMw(handler.getProduct))
 
 	server := &fasthttp.Server{
-		Handler: middleware.RequestLogger(r.Handler),
+		Handler: tracing.RequestTracingMiddleware(middleware.RequestLoggerMiddleware(r.Handler), "product"),
 	}
 
 	log := middleware.GetLogger()
@@ -91,8 +93,9 @@ func (h *RestHandler) getProduct(ctx *fasthttp.RequestCtx) {
 
 	if user_id == "" {
 		h.log.Info().Msg("no user was found")
+	} else {
+		h.log.Info().Str("user_id", user_id).Msg("user found")
 	}
-	h.log.Info().Str("user_id", user_id).Msg("user found")
 
 	searchRes, err := h.index.Search(string(query), &meilisearch.SearchRequest{
 		Limit: 10,

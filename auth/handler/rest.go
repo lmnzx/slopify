@@ -5,13 +5,15 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/fasthttp/router"
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/pkg/cookie"
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
+	"github.com/lmnzx/slopify/pkg/tracing"
+
+	"github.com/fasthttp/router"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valyala/fasthttp"
@@ -49,7 +51,7 @@ func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Clien
 	r.GET("/logout", handler.LogOut)
 
 	server := &fasthttp.Server{
-		Handler: middleware.RequestLogger(r.Handler),
+		Handler: tracing.RequestTracingMiddleware(middleware.RequestLoggerMiddleware(r.Handler), "auth"),
 	}
 
 	serveErrCh := make(chan error, 1)

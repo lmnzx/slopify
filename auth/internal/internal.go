@@ -5,9 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lmnzx/slopify/pkg/middleware"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 )
