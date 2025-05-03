@@ -6,11 +6,13 @@ import (
 	"strings"
 
 	"github.com/lmnzx/slopify/pkg/middleware"
+
 	"github.com/spf13/viper"
 )
 
 type ProductServiceConfig struct {
 	Name               string `mapstructure:"name"`
+	Version            string `mapstructure:"version"`
 	RestServerAddress  string `mapstructure:"restserveraddress"`
 	AuthServiceAddress string `mapstructure:"authserviceaddress"`
 	Postgres           struct {
@@ -25,6 +27,7 @@ type ProductServiceConfig struct {
 		Url string `mapstructure:"url"`
 		Key string `mapstructure:"key"`
 	}
+	OtelCollectorURL string `mapstructure:"otelcollectorurl"`
 }
 
 func GetConfig() ProductServiceConfig {

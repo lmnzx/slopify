@@ -1,4 +1,5 @@
 name: "auth"
+version: "0.0.1"
 restserveraddress: ":3001"
 grpcserveraddress: ":6000"
 accountserviceaddress: ":4000"
@@ -11,3 +12,4 @@ valkey:
 secrets:
   accesstoken: "onlyfortest"
   refreshtoken: "onlyfortest"
+otelcollectorurl: "0.0.0.0:4317"

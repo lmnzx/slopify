@@ -12,6 +12,7 @@ import (
 	"github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/account/repository"
 	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/tracing"
 
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
@@ -44,7 +45,10 @@ func StartGrpcServer(ctx context.Context, port string, queries *repository.Queri
 	}
 
 	s := grpc.NewServer(
-		grpc.UnaryInterceptor(middleware.UnaryServerInterceptor()),
+		grpc.ChainUnaryInterceptor(
+			middleware.UnaryServerLoggingInterceptor(),
+			tracing.UnaryServerTracingInterceptor("account"),
+		),
 	)
 
 	h := NewGrpcHandler(queries)
