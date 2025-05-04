@@ -101,10 +101,8 @@ func UnaryServerLoggingInterceptor() grpc.UnaryServerInterceptor {
 func GetLogger() zerolog.Logger {
 	once.Do(func() {
 		zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
-		zerolog.TimeFieldFormat = time.RFC3339Nano
 
-		logLevel := zerolog.DebugLevel
-		var output io.Writer = os.Stdout
+		var output io.Writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339Nano}
 
 		serviceName := os.Getenv(ServiceNameEnvVar)
 		if serviceName == "" {
@@ -112,10 +110,11 @@ func GetLogger() zerolog.Logger {
 		}
 
 		log = zerolog.New(output).
-			Level(zerolog.Level(logLevel)).
+			Level(zerolog.TraceLevel).
 			With().
 			Timestamp().
 			Str("service", serviceName).
+			Caller().
 			Logger()
 	})
 

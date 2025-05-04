@@ -37,7 +37,7 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	r := router.New()
 
 	handler := NewRestHandler(queries)
-	authMw := middleware.AuthMiddleware(authClient)
+	authMw := middleware.AuthMiddleware(authClient, "account")
 
 	r.GET("/health", handler.healthCheck)
 	r.POST("/update", authMw(handler.update))

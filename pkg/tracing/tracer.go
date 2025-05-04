@@ -2,12 +2,14 @@ package tracing
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -99,10 +101,24 @@ func RequestTracingMiddleware(next fasthttp.RequestHandler, serviceName string) 
 
 		next(ctx)
 
+		statusCode := ctx.Response.StatusCode()
+
 		span.SetAttributes(
-			attribute.Int("http.status_code", ctx.Response.StatusCode()),
+			attribute.Int("http.status_code", statusCode),
 			attribute.Int("http.response_content_length", len(ctx.Response.Body())),
 		)
+		if statusCode >= 400 {
+			span.SetStatus(codes.Error, fmt.Sprintf("Request failed with status code %d", statusCode))
+			if errValue := ctx.UserValue("error"); errValue != nil {
+				if err, ok := errValue.(error); ok {
+					span.RecordError(err)
+					span.SetAttributes(attribute.String("error.message", err.Error()))
+				}
+			}
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+
 	}
 }
 
