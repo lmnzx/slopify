@@ -12,8 +12,10 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/meilisearch/meilisearch-go"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -47,6 +49,7 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	authMw := middleware.AuthMiddleware(authClient, "product")
 
 	r.GET("/health", handler.healthCheck)
+	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 	r.GET("/get", authMw(handler.getProduct))
 
 	server := &fasthttp.Server{

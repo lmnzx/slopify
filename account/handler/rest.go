@@ -10,11 +10,13 @@ import (
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
 	"github.com/lmnzx/slopify/pkg/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fasthttp/router"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 type RestHandler struct {
@@ -40,6 +42,7 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	authMw := middleware.AuthMiddleware(authClient, "account")
 
 	r.GET("/health", handler.healthCheck)
+	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 	r.POST("/update", authMw(handler.update))
 
 	server := &fasthttp.Server{
