@@ -15,6 +15,7 @@ import (
 	"github.com/lmnzx/slopify/pkg/tracing"
 
 	"github.com/valkey-io/valkey-go"
+	"github.com/valkey-io/valkey-go/valkeyotel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -37,7 +38,7 @@ func main() {
 		log.Fatal().Err(err).Msg("unable to parse valkey url")
 	}
 
-	valkeyClient, err := valkey.NewClient(client)
+	valkeyClient, err := valkeyotel.NewClient(client)
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to connect to valkey database")
 	}

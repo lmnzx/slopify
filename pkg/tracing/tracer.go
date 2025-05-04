@@ -25,6 +25,8 @@ func InitTracer(serviceName string, serviceVersion string, collectorURL string, 
 	ctx := context.Background()
 
 	res, err := resource.New(ctx,
+		resource.WithContainer(),
+		resource.WithProcess(),
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
 			semconv.ServiceVersionKey.String(serviceVersion),

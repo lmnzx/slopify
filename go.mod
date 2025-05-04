@@ -3,12 +3,14 @@ module github.com/lmnzx/slopify
 go 1.24.2
 
 require (
+	github.com/exaring/otelpgx v0.9.1
 	github.com/fasthttp/router v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/meilisearch/meilisearch-go v0.31.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/viper v1.20.1
+	github.com/valkey-io/valkey-go/valkeyotel v1.0.59
 	github.com/valyala/fasthttp v1.60.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.35.0
@@ -40,7 +42,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
@@ -58,7 +59,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/valkey-io/valkey-go v1.0.57
+	github.com/valkey-io/valkey-go v1.0.59
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
