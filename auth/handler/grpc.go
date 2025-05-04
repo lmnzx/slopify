@@ -14,6 +14,8 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -25,6 +27,7 @@ type GrpcHandler struct {
 	authService    internal.AuthService
 	accountService account.AccountServiceClient
 	log            zerolog.Logger
+	tracer         trace.Tracer
 }
 
 func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets) *GrpcHandler {
@@ -32,6 +35,7 @@ func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceC
 		authService:    *internal.NewAuthService(client, secrets),
 		accountService: accountService,
 		log:            middleware.GetLogger(),
+		tracer:         otel.Tracer("auth-grpc-service"),
 	}
 }
 

@@ -12,11 +12,13 @@ import (
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
 	"github.com/lmnzx/slopify/pkg/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fasthttp/router"
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 type RestHandler struct {
@@ -44,6 +46,7 @@ func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Clien
 	r := router.New()
 
 	r.GET("/health", handler.HealthCheck)
+	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 	r.POST("/signup", handler.SignUp)
 	r.POST("/login", handler.LogIn)
 	r.GET("/validate", handler.ValidateSession)

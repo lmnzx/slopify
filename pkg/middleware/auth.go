@@ -1,33 +1,67 @@
 package middleware
 
 import (
+	"context"
 	"time"
 
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/cookie"
+
 	"github.com/valyala/fasthttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
-type ctxKey string
+const UserIDCtxKey string = "user_id"
+const TracingCtxKey string = "tracing_context"
 
-const UserIDCtxKey ctxKey = "userID"
+func AuthMiddleware(authService auth.AuthServiceClient, serviceName string) func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	tracer := otel.Tracer(serviceName)
 
-func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
 			log := GetLogger()
-
 			log.Info().Msg("auth middleware executing")
+
+			var spanCtx context.Context
+			parentCtxVal := ctx.UserValue(TracingCtxKey)
+			if parentCtxVal != nil {
+				if parentContext, ok := parentCtxVal.(context.Context); ok {
+					spanCtx = parentContext
+				} else {
+					spanCtx = context.Background()
+				}
+			} else {
+				spanCtx = context.Background()
+			}
+
+			_, span := tracer.Start(
+				spanCtx,
+				"AuthMiddleware",
+				trace.WithAttributes(
+					attribute.String("middleware", "auth"),
+					attribute.String("http.path", string(ctx.Path())),
+					attribute.String("http.method", string(ctx.Method())),
+				),
+			)
+			defer span.End()
 
 			accessToken := cookie.Get(ctx, "access_token")
 			refreshToken := cookie.Get(ctx, "refresh_token")
 
 			if accessToken == "" && refreshToken == "" {
 				log.Warn().Msg("authMiddleware: access or refresh token missing from cookies")
+				span.SetAttributes(attribute.Bool("auth.success", false))
 				ctx.SetUserValue(UserIDCtxKey, "")
 				next(ctx)
 				return
 			}
+
+			_, authSpan := tracer.Start(
+				trace.ContextWithSpan(spanCtx, span),
+				"ValidateSession",
+			)
 
 			r, err := authService.ValidateSession(ctx, &auth.TokenPair{
 				AccessToken:  accessToken,
@@ -35,12 +69,11 @@ func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.Reque
 			})
 			if err != nil || r.Status != auth.ValidateSessionResponse_VALID || r == nil {
 				log.Warn().Msg("authMiddleware: session validation failed")
+				authSpan.SetAttributes(attribute.String("auth.middleware", "session validation failed"))
 				ctx.SetUserValue(UserIDCtxKey, "")
 				next(ctx)
 				return
 			}
-
-			log.Info().Str("userID", *r.UserId).Msg("authMiddleware: session validated successfully")
 
 			cookie.Set(ctx, "access_token", r.TokenPair.AccessToken, "/", "", time.Minute*15, false, fasthttp.CookieSameSiteDefaultMode)
 			if refreshToken != r.TokenPair.RefreshToken {
@@ -48,6 +81,8 @@ func AuthMiddleware(authService auth.AuthServiceClient) func(next fasthttp.Reque
 			}
 
 			ctx.SetUserValue(UserIDCtxKey, *r.UserId)
+			authSpan.SetAttributes(attribute.String("auth.user_id", *r.UserId))
+			authSpan.End()
 
 			next(ctx)
 		}

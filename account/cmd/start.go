@@ -14,6 +14,7 @@ import (
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/tracing"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -32,7 +33,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dbpool, err := pgxpool.New(ctx, config.GetDBConnectionString())
+	dbCfg, err := pgxpool.ParseConfig(config.GetDBConnectionString())
+	if err != nil {
+		log.Fatal().Err(err).Msg("unable to parse database connection string")
+	}
+
+	dbCfg.ConnConfig.Tracer = otelpgx.NewTracer()
+
+	dbpool, err := pgxpool.NewWithConfig(ctx, dbCfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to connect to database")
 	}
