@@ -6,11 +6,12 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/exaring/otelpgx"
 	auth "github.com/lmnzx/slopify/auth/proto"
-	"github.com/lmnzx/slopify/pkg/middleware"
-	"github.com/lmnzx/slopify/pkg/tracing"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/lmnzx/slopify/product/config"
 	"github.com/lmnzx/slopify/product/handler"
 	"github.com/lmnzx/slopify/product/repository"
@@ -24,11 +25,16 @@ import (
 
 func main() {
 	config := config.GetConfig()
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 
-	cleanup, err := tracing.InitTracer(config.Name, config.Version, config.OtelCollectorURL, log)
+	cleanup, err := instrumentation.Init(instrumentation.InstrumentationConfig{
+		ServiceName:     config.Name,
+		ServiceVersion:  config.Version,
+		CollectorURL:    config.OtelCollectorURL,
+		MetricsInterval: 10 * time.Second,
+	})
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to initialize tracer")
+		log.Fatal().Err(err).Msg("failed to initialize instrumentation")
 	}
 	defer cleanup()
 

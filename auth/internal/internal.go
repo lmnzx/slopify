@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/logger"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -55,7 +55,7 @@ var (
 func NewAuthService(kv valkey.Client, secrets Secrets) *AuthService {
 	return &AuthService{
 		kv:  kv,
-		log: middleware.GetLogger(),
+		log: logger.GetLogger(),
 		secrets: Secrets{
 			AccessTokenSecret:  secrets.AccessTokenSecret,
 			RefreshTokenSecret: secrets.RefreshTokenSecret,

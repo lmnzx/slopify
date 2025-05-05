@@ -6,13 +6,14 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	account "github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/auth/config"
 	"github.com/lmnzx/slopify/auth/handler"
 	"github.com/lmnzx/slopify/auth/internal"
-	"github.com/lmnzx/slopify/pkg/middleware"
-	"github.com/lmnzx/slopify/pkg/tracing"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 
 	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/valkeyotel"
@@ -22,11 +23,16 @@ import (
 
 func main() {
 	config := config.GetConfig()
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 
-	cleanup, err := tracing.InitTracer(config.Name, config.Version, config.OtelCollectorURL, log)
+	cleanup, err := instrumentation.Init(instrumentation.InstrumentationConfig{
+		ServiceName:     config.Name,
+		ServiceVersion:  config.Version,
+		CollectorURL:    config.OtelCollectorURL,
+		MetricsInterval: 10 * time.Second,
+	})
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to initialize tracer")
+		log.Fatal().Err(err).Msg("failed to initialize instrumentation")
 	}
 	defer cleanup()
 

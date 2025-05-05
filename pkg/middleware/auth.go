@@ -6,6 +6,7 @@ import (
 
 	auth "github.com/lmnzx/slopify/auth/proto"
 	"github.com/lmnzx/slopify/pkg/cookie"
+	"github.com/lmnzx/slopify/pkg/logger"
 
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel"
@@ -21,7 +22,7 @@ func AuthMiddleware(authService auth.AuthServiceClient, serviceName string) func
 
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(ctx *fasthttp.RequestCtx) {
-			log := GetLogger()
+			log := logger.GetLogger()
 			log.Info().Msg("auth middleware executing")
 
 			var spanCtx context.Context

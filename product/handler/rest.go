@@ -5,9 +5,10 @@ import (
 	"sync"
 
 	auth "github.com/lmnzx/slopify/auth/proto"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
-	"github.com/lmnzx/slopify/pkg/tracing"
 	"github.com/lmnzx/slopify/product/repository"
 
 	"github.com/fasthttp/router"
@@ -34,7 +35,7 @@ func NewRestHandler(queries *repository.Queries, index meilisearch.IndexManager)
 	return &RestHandler{
 		index:   index,
 		queries: queries,
-		log:     middleware.GetLogger(),
+		log:     logger.GetLogger(),
 		res:     response.NewResponseSender(),
 		tracer:  otel.Tracer("product-rest-service"),
 	}
@@ -53,10 +54,10 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	r.GET("/get", authMw(handler.getProduct))
 
 	server := &fasthttp.Server{
-		Handler: tracing.RequestTracingMiddleware(middleware.RequestLoggerMiddleware(r.Handler), "product"),
+		Handler: instrumentation.RequestInstrumentationMiddleware(r.Handler, "product"),
 	}
 
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 	serveErrCh := make(chan error, 1)
 	go func() {
 		log.Info().Str("port", port).Msg("rest server started")

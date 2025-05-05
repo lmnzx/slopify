@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lmnzx/slopify/account/proto"
 	"github.com/lmnzx/slopify/account/repository"
-	"github.com/lmnzx/slopify/pkg/middleware"
-	"github.com/lmnzx/slopify/pkg/tracing"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
@@ -36,7 +36,7 @@ func NewGrpcHandler(queries *repository.Queries) *GrpcHandler {
 func StartGrpcServer(ctx context.Context, port string, queries *repository.Queries, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
@@ -45,9 +45,8 @@ func StartGrpcServer(ctx context.Context, port string, queries *repository.Queri
 	}
 
 	s := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			middleware.UnaryServerLoggingInterceptor(),
-			tracing.UnaryServerTracingInterceptor("account"),
+		grpc.UnaryInterceptor(
+			instrumentation.UnaryInstrumentationMiddleware("account"),
 		),
 	)
 

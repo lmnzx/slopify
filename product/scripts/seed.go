@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/lmnzx/slopify/product/repository"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -31,7 +31,7 @@ type Response struct {
 }
 
 func Seed(queries *repository.Queries, index meilisearch.IndexManager) {
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 
 	ctx, cancle := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancle()

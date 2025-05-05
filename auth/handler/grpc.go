@@ -9,13 +9,11 @@ import (
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/auth/proto"
-	"github.com/lmnzx/slopify/pkg/middleware"
-	"github.com/lmnzx/slopify/pkg/tracing"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 
 	"github.com/rs/zerolog"
 	"github.com/valkey-io/valkey-go"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
@@ -27,22 +25,20 @@ type GrpcHandler struct {
 	authService    internal.AuthService
 	accountService account.AccountServiceClient
 	log            zerolog.Logger
-	tracer         trace.Tracer
 }
 
 func NewGrpcHandler(client valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets) *GrpcHandler {
 	return &GrpcHandler{
 		authService:    *internal.NewAuthService(client, secrets),
 		accountService: accountService,
-		log:            middleware.GetLogger(),
-		tracer:         otel.Tracer("auth-grpc-service"),
+		log:            logger.GetLogger(),
 	}
 }
 
 func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
@@ -51,9 +47,8 @@ func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Clien
 	}
 
 	s := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			middleware.UnaryServerLoggingInterceptor(),
-			tracing.UnaryServerTracingInterceptor("auth"),
+		grpc.UnaryInterceptor(
+			instrumentation.UnaryInstrumentationMiddleware("auth"),
 		),
 	)
 
