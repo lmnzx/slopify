@@ -7,9 +7,10 @@ import (
 
 	"github.com/lmnzx/slopify/account/repository"
 	auth "github.com/lmnzx/slopify/auth/proto"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/lmnzx/slopify/pkg/middleware"
 	"github.com/lmnzx/slopify/pkg/response"
-	"github.com/lmnzx/slopify/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fasthttp/router"
@@ -28,7 +29,7 @@ type RestHandler struct {
 func NewRestHandler(queries *repository.Queries) *RestHandler {
 	return &RestHandler{
 		queries: queries,
-		log:     middleware.GetLogger(),
+		log:     logger.GetLogger(),
 		res:     response.NewResponseSender(),
 	}
 }
@@ -46,10 +47,10 @@ func StartRestServer(ctx context.Context, port string, queries *repository.Queri
 	r.POST("/update", authMw(handler.update))
 
 	server := &fasthttp.Server{
-		Handler: tracing.RequestTracingMiddleware(middleware.RequestLoggerMiddleware(r.Handler), "account"),
+		Handler: instrumentation.RequestInstrumentationMiddleware(r.Handler, "account"),
 	}
 
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 	serveErrCh := make(chan error, 1)
 	go func() {
 		log.Info().Str("port", port).Msg("rest server started")

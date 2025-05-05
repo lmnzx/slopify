@@ -9,9 +9,9 @@ import (
 	"github.com/lmnzx/slopify/auth/client"
 	"github.com/lmnzx/slopify/auth/internal"
 	"github.com/lmnzx/slopify/pkg/cookie"
-	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/instrumentation"
+	"github.com/lmnzx/slopify/pkg/logger"
 	"github.com/lmnzx/slopify/pkg/response"
-	"github.com/lmnzx/slopify/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fasthttp/router"
@@ -33,14 +33,14 @@ func NewRestHandler(valkeyClient valkey.Client, accountService account.AccountSe
 		authService:    *internal.NewAuthService(valkeyClient, secrets),
 		accountService: accountService,
 		res:            response.NewResponseSender(),
-		log:            middleware.GetLogger(),
+		log:            logger.GetLogger(),
 	}
 }
 
 func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Client, accountService account.AccountServiceClient, secrets internal.Secrets, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	log := middleware.GetLogger()
+	log := logger.GetLogger()
 
 	handler := NewRestHandler(valkeyClient, accountService, secrets)
 	r := router.New()
@@ -54,7 +54,7 @@ func StartRestServer(ctx context.Context, port string, valkeyClient valkey.Clien
 	r.GET("/logout", handler.LogOut)
 
 	server := &fasthttp.Server{
-		Handler: tracing.RequestTracingMiddleware(middleware.RequestLoggerMiddleware(r.Handler), "auth"),
+		Handler: instrumentation.RequestInstrumentationMiddleware(r.Handler, "auth"),
 	}
 
 	serveErrCh := make(chan error, 1)

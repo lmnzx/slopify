@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/lmnzx/slopify/pkg/middleware"
+	"github.com/lmnzx/slopify/pkg/logger"
 
 	"github.com/spf13/viper"
 )
@@ -50,7 +50,7 @@ func GetConfig() AuthServiceConfig {
 		log.Fatalf("Unable to decode into struct, %v", err)
 	}
 
-	middleware.SetServiceName(config.Name)
+	logger.SetServiceName(config.Name)
 
 	return config
 }
