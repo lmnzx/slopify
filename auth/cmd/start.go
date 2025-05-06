@@ -52,7 +52,10 @@ func main() {
 		log.Fatal().Err(err).Msg("unable to ping to valkey database")
 	}
 
-	conn, err := grpc.NewClient(config.AccountServiceAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(config.AccountServiceAddress,
+		grpc.WithUnaryInterceptor(instrumentation.UnaryClientInstrumentationMiddleware(config.Name)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect")
 	}

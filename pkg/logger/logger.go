@@ -20,8 +20,9 @@ const (
 func GetLogger() zerolog.Logger {
 	once.Do(func() {
 		zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
+		zerolog.TimeFieldFormat = time.RFC3339Nano
 
-		var output io.Writer = zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339Nano}
+		var output io.Writer = os.Stdout
 
 		serviceName := os.Getenv(ServiceNameEnvVar)
 		if serviceName == "" {

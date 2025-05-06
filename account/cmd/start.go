@@ -58,7 +58,10 @@ func main() {
 
 	queries := repository.New(dbpool)
 
-	conn, err := grpc.NewClient(config.AuthServiceAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(config.AuthServiceAddress,
+		grpc.WithUnaryInterceptor(instrumentation.UnaryClientInstrumentationMiddleware(config.Name)),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to connect")
 	}

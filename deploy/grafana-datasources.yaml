@@ -1,0 +1,40 @@
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy 
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000
+    isDefault: false 
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogs: 
+        datasourceUid: 'Loki'
+        tags: ['job', 'instance', 'service.name', 'container', 'compose_service']
+        mappedTags: [{ key: 'service.name', value: 'service' }]
+        mapTagNamesEnabled: false 
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      serviceMap:
+        datasourceUid: 'Mimir'
+      nodeGraph:
+        enabled: true 
+    isDefault: false
+
+  - name: Mimir
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    jsonData:
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: 'Tempo'
+    isDefault: true 
