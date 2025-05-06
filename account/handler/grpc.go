@@ -46,7 +46,7 @@ func StartGrpcServer(ctx context.Context, port string, queries *repository.Queri
 
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(
-			instrumentation.UnaryInstrumentationMiddleware("account"),
+			instrumentation.UnaryServerInstrumentationMiddleware("account"),
 		),
 	)
 

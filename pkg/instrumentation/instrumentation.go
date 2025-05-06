@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 type InstrumentationConfig struct {
@@ -264,7 +265,7 @@ func RequestInstrumentationMiddleware(next fasthttp.RequestHandler, serviceName 
 	}
 }
 
-func UnaryInstrumentationMiddleware(serviceName string) grpc.UnaryServerInterceptor {
+func UnaryServerInstrumentationMiddleware(serviceName string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		tracer := otel.Tracer(serviceName)
 
@@ -338,5 +339,84 @@ func UnaryInstrumentationMiddleware(serviceName string) grpc.UnaryServerIntercep
 		}
 
 		return resp, err
+	}
+}
+
+func UnaryClientInstrumentationMiddleware(serviceName string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		tracer := otel.Tracer(serviceName)
+
+		serverAddr := cc.Target()
+
+		grpcActiveRequests.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("rpc.service", serviceName),
+			attribute.String("rpc.method", method),
+		))
+
+		startTime := time.Now()
+		spanCtx, span := tracer.Start(
+			ctx,
+			method,
+			trace.WithAttributes(
+				attribute.String("rpc.system", "grpc"),
+				attribute.String("rpc.method", method),
+				attribute.String("rpc.service", serviceName),
+				attribute.String("rpc.server_address", serverAddr),
+			),
+			trace.WithTimestamp(startTime),
+		)
+
+		err := invoker(spanCtx, method, req, reply, cc, opts...)
+
+		span.End(trace.WithTimestamp(time.Now()))
+
+		duration := time.Since(startTime)
+		traceID := span.SpanContext().TraceID().String()
+
+		statusCode := "OK"
+		if err != nil {
+			statusCode = "ERROR"
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+
+			if st, ok := status.FromError(err); ok {
+				statusCode = st.Code().String()
+			}
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+
+		log := logger.GetLogger()
+
+		responseLog := log.With().
+			Str("method", method).
+			Str("server_addr", serverAddr).
+			Dur("elapsed_ms", duration).
+			Str("trace_id", traceID).
+			Str("status", statusCode).
+			Logger()
+
+		grpcActiveRequests.Add(ctx, -1, metric.WithAttributes(
+			attribute.String("rpc.service", serviceName),
+			attribute.String("rpc.method", method),
+		))
+
+		attrs := []attribute.KeyValue{
+			attribute.String("rpc.system", "grpc"),
+			attribute.String("rpc.service", serviceName),
+			attribute.String("rpc.method", method),
+			attribute.String("rpc.status", statusCode),
+		}
+
+		grpcRequestCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+		grpcRequestDuration.Record(ctx, float64(duration.Milliseconds()), metric.WithAttributes(attrs...))
+
+		if err != nil {
+			responseLog.Error().Msg("client request completed with error")
+		} else {
+			responseLog.Info().Msg("client request completed successfully")
+		}
+
+		return err
 	}
 }

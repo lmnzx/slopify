@@ -48,7 +48,7 @@ func StartGrpcServer(ctx context.Context, port string, valkeyClient valkey.Clien
 
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(
-			instrumentation.UnaryInstrumentationMiddleware("auth"),
+			instrumentation.UnaryServerInstrumentationMiddleware("auth"),
 		),
 	)
 
